@@ -5,7 +5,7 @@
 # Use -a to indicate that the given VCF file is already annotated
 # Requires vcfanno (http://www.github.com/brentp/vcfanno)
 # Requires /gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz and its *.tbi counterpart
-# Requires refGene.exons.b37.bed and humangenes.bed (from UCSC Genome Browser knownGene table - chrom, txStart, txEnd, strand, kgXref.geneSymbol in that order) one directory up. Neither should have a header line
+# Requires refGene.exons.b37.bed and humangenes.bed (from UCSC Genome Browser knownGene table - chrom, txStart, txEnd, strand, kgXref.geneSymbol in that order). Neither should have a header line
 # Creates file of introns using bedtools subtract on the above two files
 # Annotation done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
 
@@ -40,7 +40,7 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
     print "Writing config file\n" if $debug;
     $wroteconfig = 1;
     open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-    print CONFIG "[annotation]]\nfile=\"../refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"../humangenes.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"../introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
+    print CONFIG "[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"humangenes.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
     close CONFIG;
   }
 
@@ -49,17 +49,17 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
   die if system("preprocess");
 }
 
-unless (-s '../introns.bed') { # Generate introns file if necessary
+unless (-s 'introns.bed') { # Generate introns file if necessary
   print "Generating introns file\n" if $debug;
-  system("bedtools subtract -a ../humangenes.bed -b ../refGene.exons.b37.bed > ../introns.bed");
-  system("awk '{print \$0 \"\t\" NR}' ../introns.bed > ../introns.tmp"); # Add column with unique intron ID equal to line number, assumes ../introns.bed has no header line
-  system("bedtools sort -i ../introns.bed > ../introns.bed");
-  system("mv -f ../introns.tmp ../introns.bed");
+  system("bedtools subtract -a humangenes.bed -b refGene.exons.b37.bed > introns.bed");
+  system("awk '{print \$0 \"\t\" NR}' introns.bed > introns.tmp"); # Add column with unique intron ID equal to line number, assumes introns.bed has no header line
+  system("bedtools sort -i introns.bed > introns.bed");
+  system("mv -f introns.tmp introns.bed");
 }
 
 print "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (chrom, start, stop, strand)
-open(GENES, "< ../humangenes.bed") || die "Could not open ../humangenes.bed: $!";
+open(GENES, "< humangenes.bed") || die "Could not open humangenes.bed: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
   my ($genechrom, $genestart, $genestop, $genestrand, $genesymbol) = split(/\s+/,$geneline);
   if (defined $genes{$genesymbol}) { ## Assume chromosome and strand stay constant
