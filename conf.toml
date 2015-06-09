@@ -1,0 +1,17 @@
+[[annotation]]
+file="../refGene.exons.b37.bed"
+names=["ExonGeneNames"]
+columns=[5]
+ops=["uniq"]
+
+[[annotation]]
+file="../humangenes.bed"
+names=["Gene"]
+columns=[5]
+ops=["uniq"]
+
+[[annotation]]
+file="../introns.bed"
+names=["Intron"]
+columns=[6]
+ops=["uniq"]
