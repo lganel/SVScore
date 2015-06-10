@@ -10,4 +10,5 @@ usage: ./svscore [-dza] vcf
 
 # Dependencies
 [vcfanno](https://www.github.com/brentp/vcfanno)
+
 whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from [CADD](http://cadd.gs.washington.edu/download) 
