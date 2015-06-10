@@ -52,12 +52,9 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
   die if system("preprocess");
 }
 
-unless (-s 'introns.bed') { # Generate introns file if necessary
+unless (-s 'introns.bed') { # Generate introns file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
   print "Generating introns file\n" if $debug;
-  system("bedtools subtract -a humangenes.bed -b refGene.exons.b37.bed > introns.bed");
-  system("awk '{print \$0 \"\t\" NR}' introns.bed > introns.tmp"); # Add column with unique intron ID equal to line number, assumes introns.bed has no header line
-  system("mv -f introns.tmp introns.bed");
-  system("bedtools sort -i introns.bed > introns.bed");
+  system("bedtools subtract -a humangenes.bed -b refGene.exons.b37.bed | bedtools sort -i - | uniq | awk '{print \$0 \"\t\" NR}' > introns.bed"); # Add column with unique intron ID equal to line number, assumes introns.bed has no header line
 }
 
 print "Reading gene list\n" if $debug;
