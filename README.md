@@ -3,10 +3,11 @@ Prioritize structural variants based on annotations and C scores
 Still under active development
 
 # Usage
-usage: ./svscore [-dza] vcf
+```usage: ./svscore [-dza] vcf
   -d	Debug (verbose) mode
   -z	Indicates that vcf is gzipped
   -a	Indicates that vcf has already been annotated using vcfanno
+```
 
 # Dependencies
 [vcfanno](https://www.github.com/brentp/vcfanno)
