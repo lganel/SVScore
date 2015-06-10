@@ -8,6 +8,7 @@
 # Requires refGene.exons.b37.bed and humangenes.bed (from UCSC Genome Browser knownGene table - chrom, txStart, txEnd, strand, kgXref.geneSymbol in that order). Neither should have a header line
 # Creates file of introns using bedtools subtract on the above two files
 # Annotation done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
+# Assumes input vcf is sorted
 
 use strict;
 use Getopt::Std;
@@ -21,6 +22,8 @@ my $debug = defined $options{'d'};
 my $annotated = defined $options{'a'};
 
 ##TODO PRIORITY 2: Enable piping input through STDIN 
+##TODO PRIORITY 2: Enable option for pointing to CADD file directory
+##TODO PRIORITY 1: Work with VCFs instead of BEDPEs
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron file. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 print "Preparing preprocessing command\n" if $debug;
@@ -53,8 +56,8 @@ unless (-s 'introns.bed') { # Generate introns file if necessary
   print "Generating introns file\n" if $debug;
   system("bedtools subtract -a humangenes.bed -b refGene.exons.b37.bed > introns.bed");
   system("awk '{print \$0 \"\t\" NR}' introns.bed > introns.tmp"); # Add column with unique intron ID equal to line number, assumes introns.bed has no header line
-  system("bedtools sort -i introns.bed > introns.bed");
   system("mv -f introns.tmp introns.bed");
+  system("bedtools sort -i introns.bed > introns.bed");
 }
 
 print "Reading gene list\n" if $debug;
@@ -70,23 +73,47 @@ foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, st
   }
 }
 
-#print "Calling vcfToBedpe\n" if $debug;
-#system("vcfToBedpe -i $preprocessedfile -o $prefix.bedpe");
-#open(BEDPE, "< $prefix.bedpe ") || die "Could not open BEDPE file: $!";
-#unlink $preprocessedfile unless $debug || (!$compressed && $annotated); # Don't delete file if it wasn't just created
+open(IN, "< $preprocessedfile") || die "Could not open $preprocessedfile: $!";
 
+my %processedids = ();
 my $outputfile = "$prefix.scored.txt" ;
 open(OUT, "> $outputfile") || die "Could not open output file: $!";
 print OUT "Span_score\tSpan_genenames\tSpan_exon\tLeft_score\tLeft_genenames\tLeft_exon\tRight_score\tRight_genenames\tRight_exon\n";
 
 print "Entering loop\n" if $debug;
 my $linenum = 1;
-foreach my $bedpeline (<BEDPE>) {
+foreach my $vcfline (<IN>) {
   print $linenum if $debug;
-  $linenum++ && next if $bedpeline =~ /^#/;
-  my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $info) = (split(/\s+/,$bedpeline))[0..5, 12]; # Parse line
-  $info =~ /SVTYPE=(\w+);/; # Grab SV type
+  $linenum++ && next if ($vcfline =~ /^#/);
+
+  # Parse line
+  my ($leftchrom, $leftpos, $id, $alt, $info) = (split(/\s+/,$vcfline))[0..2, 4, 7];
+
+  # Calculate coordinates
+  my ($mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop);
+
+  $info =~ /SVTYPE=(\w+);/;
   my $svtype = $1;
+  my ($cipos, $ciend) = getfields($info,"CIPOS","CIEND");
+  my @cipos = split(/,/,$cipos);
+  my @ciend = split(/,/,$ciend);
+
+  if ($svtype eq 'BND') {
+    $id =~ /(\d+)_(?:1|2)/;
+    my $mateid = $1;
+    ($rightchrom,$rightpos) = ($alt =~ /(\w):(\d+)/);
+  } else {
+    $rightchrom = $leftchrom;
+    $rightpos = getfields($info,"END");
+  }
+
+  $leftstart = $leftpos + $cipos[0] - 1;
+  $leftstop = $leftpos + $cipos[1];
+  $rightstart = $rightpos + $ciend[0] - 1;
+  $rightstop = $rightpos + $ciend[1];
+
+  $linenum++ && next if $svtype eq 'BND' && exists $processedids{$mateid}; ## Skip secondary BND lines
+  $processedids{$mateid} = 1;
   my ($spanscore, $leftscore, $rightscore);
   # Check for overlapping exons
   my ($spanexongenenames,$spangenenames) = getfields($info,"ExonGeneNames","Gene");
@@ -109,7 +136,6 @@ foreach my $bedpeline (<BEDPE>) {
     $leftscore = maxcscore($leftchrom, $leftstart, $leftstop);
     $rightscore = maxcscore($rightchrom, $rightstart, $rightstop);
 
-    ## Consider UTRs like introns
     my $leftintrons = getfields($info, "left_Intron");
     my $rightintrons = getfields($info, "right_Intron");
     my %leftintrons = map {$_ => 1} (split(/,/,$leftintrons));
@@ -156,7 +182,7 @@ foreach my $bedpeline (<BEDPE>) {
     $spangenenames = "INS";
     $spanexongenenames = "INS";
   } else {
-    die "Unrecognized SVTYPE $svtype at line $linenum of BEDPE file\n";
+    die "Unrecognized SVTYPE $svtype at line $linenum of annotated VCF file\n";
   }
 
   # Multiplier for deletions and duplications which hit an exon, lower multiplier if one of these hits a gene but not an exon. Purposely not done for BND and INV
@@ -210,7 +236,7 @@ foreach my $bedpeline (<BEDPE>) {
   $linenum++;
 }
 
-unlink "$prefix.bedpe" || warn "Could not delete $prefix.bedpe: $!" unless $debug;
+unlink "$preprocessedfile" unless (!$compressed && $annotated);
 
 sub maxcscore { # Calculate maximum C score within a given region using CADD data
   my ($chrom, $start, $stop) = @_;
