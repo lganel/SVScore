@@ -26,7 +26,7 @@ my $annotated = defined $options{'a'};
 ##TODO PRIORITY 1: Work with VCFs instead of BEDPEs
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron file. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
-print "Preparing preprocessing command\n" if $debug;
+print STDERR "Preparing preprocessing command\n" if $debug;
 $ARGV[0] =~ /^(.*)\.vcf$/;
 my $prefix = $1;
 my $preprocessedfile;
@@ -40,7 +40,7 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
   my $wroteconfig = 0;
   # Write conf.toml file
   unless ($annotated || -s "conf.toml") {
-    print "Writing config file\n" if $debug;
+    print STDERR "Writing config file\n" if $debug;
     $wroteconfig = 1;
     open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
     print CONFIG "[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"humangenes.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
@@ -48,16 +48,16 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
   }
 
   # Execute preprocessing command
-  print "Preprocessing command: $preprocess\n" if $debug;
+  print STDERR "Preprocessing command: $preprocess\n" if $debug;
   die if system("preprocess");
 }
 
 unless (-s 'introns.bed') { # Generate introns file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
-  print "Generating introns file\n" if $debug;
-  system("bedtools subtract -a humangenes.bed -b refGene.exons.b37.bed | bedtools sort -i - | uniq | awk '{print \$0 \"\t\" NR}' > introns.bed"); # Add column with unique intron ID equal to line number, assumes introns.bed has no header line
+  print STDERR "Generating introns file\n" if $debug;
+  system("bedtools subtract -a humangenes.bed -b refGene.exons.b37.bed | bedtools sort -i - | uniq | awk '{print \$0 \"\t\" NR}' > introns.bed");
 }
 
-print "Reading gene list\n" if $debug;
+print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (chrom, start, stop, strand)
 open(GENES, "< humangenes.bed") || die "Could not open humangenes.bed: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
@@ -77,59 +77,64 @@ my $outputfile = "$prefix.scored.txt" ;
 open(OUT, "> $outputfile") || die "Could not open output file: $!";
 print OUT "Span_score\tSpan_genenames\tSpan_exon\tLeft_score\tLeft_genenames\tLeft_exon\tRight_score\tRight_genenames\tRight_exon\n";
 
-print "Entering loop\n" if $debug;
+print STDERR "Entering loop\n" if $debug;
 my $linenum = 1;
 foreach my $vcfline (<IN>) {
-  print $linenum if $debug;
   $linenum++ && next if ($vcfline =~ /^#/);
+  print STDERR "$linenum," if $debug;
 
   # Parse line
   my ($leftchrom, $leftpos, $id, $alt, $info) = (split(/\s+/,$vcfline))[0..2, 4, 7];
-
-  # Calculate coordinates
   my ($mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop);
 
   $info =~ /SVTYPE=(\w+);/;
   my $svtype = $1;
-  my ($cipos, $ciend) = getfields($info,"CIPOS","CIEND");
-  my @cipos = split(/,/,$cipos);
-  my @ciend = split(/,/,$ciend);
+  my ($spanexongenenames,$spangenenames) = getfields($info,"ExonGeneNames","Gene");
+  my ($leftexongenenames,$leftgenenames) = getfields($info,"left_ExonGeneNames","left_Gene");
+  my @leftgenenames = split(/,/,$leftgenenames);
+  my ($rightexongenenames,$rightgenenames) = getfields($info,"right_ExonGeneNames","right_Gene");
+  my @rightgenenames = split(/,/,$rightgenenames);
 
   if ($svtype eq 'BND') {
     $id =~ /(\d+)_(?:1|2)/;
     my $mateid = $1;
-    ($rightchrom,$rightpos) = ($alt =~ /(\w):(\d+)/);
-  } else {
+    if (exists $processedids{$mateid}) { # Is this the second mate of this BND seen? If so, get annotations for first mate. Otherwise, store in %processedids for later when other mate is found
+      ($leftexongenenames, $leftgenenames) = @{$processedids{$mateid}}; # Left side comes from primary mate
+      delete $processedids{$mateid};
+      ($rightchrom,$rightpos) = ($alt =~ /N?[\[\]](.*):(\d+)/); # Grab right breakend coordinates
+    } else {
+      $processedids{$mateid} = [$leftexongenenames,$leftgenenames];
+      $linenum++;
+      next;
+    }
+  } else { ## DEL, DUP, INV, or INS
     $rightchrom = $leftchrom;
     $rightpos = getfields($info,"END");
   }
 
+  # Calculate start/stop coordinates from POS and CI
+  my ($cipos, $ciend) = getfields($info,"CIPOS","CIEND");
+  my @cipos = split(/,/,$cipos);
+  my @ciend = split(/,/,$ciend);
   $leftstart = $leftpos + $cipos[0] - 1;
   $leftstop = $leftpos + $cipos[1];
   $rightstart = $rightpos + $ciend[0] - 1;
   $rightstop = $rightpos + $ciend[1];
 
-  $linenum++ && next if $svtype eq 'BND' && exists $processedids{$mateid}; ## Skip secondary BND lines
-  $processedids{$mateid} = 1;
   my ($spanscore, $leftscore, $rightscore);
-  # Check for overlapping exons
-  my ($spanexongenenames,$spangenenames) = getfields($info,"ExonGeneNames","Gene");
-
-  my ($leftexongenenames,$leftgenenames) = getfields($info,"left_ExonGeneNames","left_Gene");
-  my @leftgenenames = split(/,/,$leftgenenames);
-
-  my ($rightexongenenames,$rightgenenames) = getfields($info,"right_ExonGeneNames","right_Gene");
-  my @rightgenenames = split(/,/,$rightgenenames);
    
+
   # Calculate maximum C score depending on SV type
   if ($svtype eq "DEL" || $svtype eq "DUP") {
-    warn "Unequal left and right chromosome number in $svtype at line $linenum" unless $leftchrom eq $rightchrom;
+    if ($rightstop - $leftstart > 1000000) { ## Hack to avoid extracting huge regions from CADD file
+      print OUT "$svtype too big at line $linenum: $leftstart-$rightstop";
+      $linenum++;
+      next;
+    }
     $spanscore = maxcscore($leftchrom, $leftstart, $rightstop);
     $leftscore = maxcscore($leftchrom, $leftstart, $leftstop);
     $rightscore = maxcscore($rightchrom, $rightstart, $rightstop);
-    
   } elsif ($svtype eq "INV" || $svtype eq "BND") {
-    warn "Unequal left and right chromosome number in $svtype at line $linenum" unless $leftchrom eq $rightchrom || $svtype eq "BND";
     $leftscore = maxcscore($leftchrom, $leftstart, $leftstop);
     $rightscore = maxcscore($rightchrom, $rightstart, $rightstop);
 
@@ -155,8 +160,6 @@ foreach my $vcfline (<IN>) {
       my @righttruncationscores = ();
       foreach my $gene (split(/,/,$rightgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}}[1..3];	
-	print scalar @{$genes{$gene}} if $linenum == 18; ## DEBUG
-	print @{$genes{$gene}}[4] if $linenum == 18; ## DEBUG
 	if ($genestrand eq '+') {
 	  push @righttruncationscores, maxcscore($rightchrom, max($genestart,$rightstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else { ## Minus strand
@@ -166,7 +169,6 @@ foreach my $vcfline (<IN>) {
       }
       my $lefttruncationscore = (@lefttruncationscores ? max(@lefttruncationscores) : "NoLeftGenes");
 
-      print "\n" if $linenum == 18 && $righttruncationscores[0] eq ""; ## DEBUG
       my $righttruncationscore = (@righttruncationscores ? max(@righttruncationscores) : "NoRightGenes");
       $spanscore = "$lefttruncationscore,$righttruncationscore";
       $spangenenames = "$svtype:IgnoredSpan";
@@ -232,7 +234,6 @@ foreach my $vcfline (<IN>) {
 
   $linenum++;
 }
-
 unlink "$preprocessedfile" unless (!$compressed && $annotated);
 
 sub maxcscore { # Calculate maximum C score within a given region using CADD data
@@ -249,13 +250,11 @@ sub maxcscore { # Calculate maximum C score within a given region using CADD dat
 
 sub getfields { # Parse info field of VCF line, getting fields specified in @_. $_[0] must be the info field itself. Returns list of field values
   my $info = shift @_;
-  my $pattern = "";
-  foreach my $i (0..$#_) { # Build pattern
-    $pattern .= (";" . $_[$i] . "=(.*?)");
+  my @ans;
+  foreach my $i (0..$#_) {
+    $info =~ /(?:;|^)$_[$i]=(.*?)(?:;|$)/;
+    push @ans, ($1 ? $1 : "");
   }
-  $pattern .= "(?:;|\$)";
-  my @ans = ($info =~ /$pattern/);
-  @ans = ("") x @_ unless @ans;
   if (@ans > 1) {
     return @ans;
   } else {
