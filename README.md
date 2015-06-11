@@ -5,7 +5,7 @@ Still under active development
 # Usage
 ```
 usage: ./svscore.pl [-dza] vcf
-  -d	Debug (verbose) mode
+  -d	Debug (verbose) mode, keeps intermediate and supporting files
   -z	Indicates that vcf is gzipped
   -a	Indicates that vcf has already been annotated using vcfanno
 ```

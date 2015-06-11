@@ -29,12 +29,12 @@ my $annotated = defined $options{'a'};
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files if necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 unless (-s 'refGene.exons.b37.bed') { # Generate exon file if necessary
   print STDERR "Generating exon file\n" if $debug;
-  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\\t\"  | bedtools sort > refGene.exons.b37.bed");
+  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -V -k 1,1 -k 2,2 -k 3,3 > refGene.exons.b37.bed");
 }
 
 unless (-s 'refGene.genes.b37.bed') { # Generate gene file if necessary
   print STDERR "Generating exon file\n" if $debug;
-  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$4,\$13}' OFS=\"\\t\" | bedtools sort > refGene.genes.b37.bed");
+  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$4,\$13}' OFS=\"\\t\" | sort -V -k 1,1 -k 2,2 -k 3,3 > refGene.genes.b37.bed");
 }
 
 unless (-s 'introns.bed') { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
@@ -42,7 +42,6 @@ unless (-s 'introns.bed') { # Generate intron file if necessary - add column wit
   system("bedtools subtract -a refGene.genes.b37.bed -b refGene.exons.b37.bed | bedtools sort -i - | uniq | awk '{print \$0 \"\t\" NR}' > introns.bed");
 }
 
-print STDERR "Reading gene list\n" if $debug;
 print STDERR "Preparing preprocessing command\n" if $debug;
 $ARGV[0] =~ /^(.*)\.vcf$/;
 my $prefix = $1;
@@ -60,15 +59,18 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
     print STDERR "Writing config file\n" if $debug;
     $wroteconfig = 1;
     open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-    print CONFIG "[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"refGene.genes.b37.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
+    print CONFIG "[[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"refGene.genes.b37.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
     close CONFIG;
   }
 
   # Execute preprocessing command
   print STDERR "Preprocessing command: $preprocess\n" if $debug;
   die if system("preprocess");
+
+  unlink "conf.toml" if $wroteconfig && !$debug;
 }
 
+print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (chrom, start, stop, strand)
 open(GENES, "< refGene.genes.b37.bed") || die "Could not open refGene.genes.b37.bed: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
@@ -101,6 +103,7 @@ foreach my $vcfline (<IN>) {
   $info =~ /SVTYPE=(\w+);/;
   my $svtype = $1;
   my ($spanexongenenames,$spangenenames) = getfields($info,"ExonGeneNames","Gene");
+  print "Spangenenames: $spangenenames\nSpanexongenenames: $spanexongenenames\n" if $debug; ## DEBUG
   my ($leftexongenenames,$leftgenenames) = getfields($info,"left_ExonGeneNames","left_Gene");
   my @leftgenenames = split(/,/,$leftgenenames);
   my ($rightexongenenames,$rightgenenames) = getfields($info,"right_ExonGeneNames","right_Gene");
