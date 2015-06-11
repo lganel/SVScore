@@ -5,7 +5,7 @@
 # Use -a to indicate that the given VCF file is already annotated
 # Requires vcfanno (http://www.github.com/brentp/vcfanno)
 # Requires /gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz and its *.tbi counterpart
-# Requires refGene.exons.b37.bed and humangenes.bed (from UCSC Genome Browser knownGene table - chrom, txStart, txEnd, strand, kgXref.geneSymbol in that order). Neither should have a header line
+# Requires refGene.exons.b37.bed and refGene.genes.b37.bed (from generate_files.sh script)
 # Creates file of introns using bedtools subtract on the above two files
 # Annotation done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
 # Assumes input vcf is sorted
@@ -21,11 +21,28 @@ my $compressed = defined $options{'z'};
 my $debug = defined $options{'d'};
 my $annotated = defined $options{'a'};
 
-##TODO PRIORITY 2: Enable piping input through STDIN 
-##TODO PRIORITY 2: Enable option for pointing to CADD file directory
-##TODO PRIORITY 1: Work with VCFs instead of BEDPEs
+##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
+##TODO PRIORITY 1: Enable option for pointing to CADD file
+##TODO PRIORITY 1: Usage message
+##TODO PRIORITY 1: README
 
-# Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron file. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
+# Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files if necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
+unless (-s 'refGene.exons.b37.bed') { # Generate exon file if necessary
+  print STDERR "Generating exon file\n" if $debug;
+  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\\t\"  | bedtools sort > refGene.exons.b37.bed");
+}
+
+unless (-s 'refGene.genes.b37.bed') { # Generate gene file if necessary
+  print STDERR "Generating exon file\n" if $debug;
+  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$4,\$13}' OFS=\"\\t\" | bedtools sort > refGene.genes.b37.bed");
+}
+
+unless (-s 'introns.bed') { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
+  print STDERR "Generating intron file\n" if $debug;
+  system("bedtools subtract -a refGene.genes.b37.bed -b refGene.exons.b37.bed | bedtools sort -i - | uniq | awk '{print \$0 \"\t\" NR}' > introns.bed");
+}
+
+print STDERR "Reading gene list\n" if $debug;
 print STDERR "Preparing preprocessing command\n" if $debug;
 $ARGV[0] =~ /^(.*)\.vcf$/;
 my $prefix = $1;
@@ -35,7 +52,7 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
 } else {
   $preprocessedfile = "$prefix.ann.vcf";
   # Create preprocessing command
-  my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0]" . ($annotated ? "" : " | vcfanno -ends conf.toml -") . " > $preprocessedfile";
+  my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0]" . ($annotated ? "" : " | vcfanno -ends -natural-sort conf.toml -") . " > $preprocessedfile";
 
   my $wroteconfig = 0;
   # Write conf.toml file
@@ -43,7 +60,7 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
     print STDERR "Writing config file\n" if $debug;
     $wroteconfig = 1;
     open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-    print CONFIG "[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"humangenes.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
+    print CONFIG "[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"refGene.genes.b37.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
     close CONFIG;
   }
 
@@ -52,14 +69,8 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
   die if system("preprocess");
 }
 
-unless (-s 'introns.bed') { # Generate introns file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
-  print STDERR "Generating introns file\n" if $debug;
-  system("bedtools subtract -a humangenes.bed -b refGene.exons.b37.bed | bedtools sort -i - | uniq | awk '{print \$0 \"\t\" NR}' > introns.bed");
-}
-
-print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (chrom, start, stop, strand)
-open(GENES, "< humangenes.bed") || die "Could not open humangenes.bed: $!";
+open(GENES, "< refGene.genes.b37.bed") || die "Could not open refGene.genes.b37.bed: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
   my ($genechrom, $genestart, $genestop, $genestrand, $genesymbol) = split(/\s+/,$geneline);
   if (defined $genes{$genesymbol}) { ## Assume chromosome and strand stay constant
