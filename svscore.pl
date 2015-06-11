@@ -15,11 +15,12 @@ use Getopt::Std;
 use List::Util qw(max min);
 
 my %options = ();
-getopts('dza',\%options);
+getopts('dzas',\%options);
 
 my $compressed = defined $options{'z'};
 my $debug = defined $options{'d'};
 my $annotated = defined $options{'a'};
+my $support = defined $options{'s'};
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
 ##TODO PRIORITY 1: Enable option for pointing to CADD file
@@ -33,13 +34,23 @@ unless (-s 'refGene.exons.b37.bed') { # Generate exon file if necessary
 }
 
 unless (-s 'refGene.genes.b37.bed') { # Generate gene file if necessary
-  print STDERR "Generating exon file\n" if $debug;
+  print STDERR "Generating gene file\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$4,\$13}' OFS=\"\\t\" | sort -V -k 1,1 -k 2,2 -k 3,3 > refGene.genes.b37.bed");
 }
 
 unless (-s 'introns.bed') { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
   print STDERR "Generating intron file\n" if $debug;
-  system("bedtools subtract -a refGene.genes.b37.bed -b refGene.exons.b37.bed | bedtools sort -i - | uniq | awk '{print \$0 \"\t\" NR}' > introns.bed");
+  system("bedtools subtract -a refGene.genes.b37.bed -b refGene.exons.b37.bed | sort -Vu -k 1,1 -k 2,2 -k 3,3 | awk '{print \$0 \"\t\" NR}' > introns.bed");
+}
+
+my $wroteconfig = 0;
+# Write conf.toml file
+unless ($annotated || -s "conf.toml") {
+  print STDERR "Writing config file\n" if $debug;
+  $wroteconfig = 1;
+  open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
+  print CONFIG "[[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"refGene.genes.b37.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
+  close CONFIG;
 }
 
 print STDERR "Preparing preprocessing command\n" if $debug;
@@ -53,22 +64,14 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
   # Create preprocessing command
   my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0]" . ($annotated ? "" : " | vcfanno -ends -natural-sort conf.toml -") . " > $preprocessedfile";
 
-  my $wroteconfig = 0;
-  # Write conf.toml file
-  unless ($annotated || -s "conf.toml") {
-    print STDERR "Writing config file\n" if $debug;
-    $wroteconfig = 1;
-    open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-    print CONFIG "[[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"refGene.genes.b37.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
-    close CONFIG;
-  }
-
   # Execute preprocessing command
   print STDERR "Preprocessing command: $preprocess\n" if $debug;
-  die if system("preprocess");
+  die "vcfanno failed: $!" if system("preprocess");
 
   unlink "conf.toml" if $wroteconfig && !$debug;
 }
+
+die if $support;
 
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (chrom, start, stop, strand)
@@ -248,7 +251,7 @@ foreach my $vcfline (<IN>) {
 
   $linenum++;
 }
-unlink "$preprocessedfile" unless (!$compressed && $annotated);
+unlink "$preprocessedfile" unless (!$compressed && $annotated) || $debug;
 
 sub maxcscore { # Calculate maximum C score within a given region using CADD data
   my ($chrom, $start, $stop) = @_;
