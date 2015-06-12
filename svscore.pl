@@ -5,6 +5,9 @@ use strict;
 use Getopt::Std;
 use List::Util qw(max min);
 
+$Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
+$main::VERSION = '0.1';
+
 my %options = ();
 getopts('dzasc:',\%options);
 
@@ -265,4 +268,21 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
   } else {
     return $ans[0];
   }
+}
+
+sub main::HELP_MESSAGE() {
+  print "usage: ./svscore.pl [-dzas] [-c file] vcf
+    -d	      Debug (verbose) mode, keeps intermediate and supporting files
+    -z	      Indicates that vcf is gzipped
+    -a	      Indicates that vcf has already been annotated using vcfanno
+    -s	      Create/download supporting files and quit
+    -c	      Used to point to whole_genome_SNVs.tsv.gz
+    --help    Display this message
+    --version Display version
+
+    vcf must be sorted naturally (e.g. chromosome 1, chromosome 2,...,chromosome 9, chromosome 10,...)\n"
+}
+
+sub main::VERSION_MESSAGE() {
+  print "SVScore version $main::VERSION\n";
 }
