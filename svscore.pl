@@ -1,19 +1,9 @@
 #!/usr/bin/perl -w
 
-# Use -d for debug mode
-# Use -z to indicate that the given VCF file is compressed (ending in .vcf.gz)
-# Use -a to indicate that the given VCF file is already annotated
-# Requires vcfanno (http://www.github.com/brentp/vcfanno)
-# Requires /gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz and its *.tbi counterpart
-# Requires refGene.exons.b37.bed and refGene.genes.b37.bed (from generate_files.sh script)
-# Creates file of introns using bedtools subtract on the above two files
-# Annotation done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-# Assumes input vcf is sorted naturally (e.g. chromosome 1, chromosome 2,...,chromosome 9, chromosome 10,...)
 
 use strict;
 use Getopt::Std;
 use List::Util qw(max min);
-#use Data::Dumper; ## DEBUG
 
 my %options = ();
 getopts('dzas',\%options);
@@ -60,7 +50,7 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
   $preprocessedfile = $ARGV[0];
 } else {
   $preprocessedfile = "$prefix.ann.vcf";
-  # Create preprocessing command
+  # Create preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
   my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0]" . ($annotated ? "" : " | vcfanno -ends -natural-sort conf.toml -") . " > $preprocessedfile";
 
   # Execute preprocessing command
@@ -138,7 +128,6 @@ foreach my $vcfline (<IN>) {
   $rightstop = $rightpos + $ciend[1];
 
   my ($spanscore, $leftscore, $rightscore);
-  #print "\nLeftgenenames: $leftgenenames; Rightgenenames: $rightgenenames\n" if $linenum == 1105; ## DEBUG
 
   # Calculate maximum C score depending on SV type
   if ($svtype eq "DEL" || $svtype eq "DUP") {
@@ -162,7 +151,6 @@ foreach my $vcfline (<IN>) {
       $spanscore = "${svtype}SameIntrons" if $sameintrons;
       $spanscore = "${svtype}NoGenes" unless $sameintrons;
     } else { # Consider variant to be truncating the gene(s)
-#      print "\nLeft: $leftchrom, $leftstart, $leftstop, $leftgenenames; Right: $rightchrom, $rightstart, $rightstop, $rightgenenames\n" if $linenum == 1105; ## DEBUG
       my @lefttruncationscores = ();
       foreach my $gene (split(/,/,$leftgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}}[1..3];	
@@ -171,7 +159,6 @@ foreach my $vcfline (<IN>) {
 	} else { ## Minus strand
 	  push @lefttruncationscores,maxcscore($leftchrom, $genestart, min($genestop,$leftstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
-#      print "$lefttruncationscores[0]\n" if $linenum == 1105; ## DEBUG
       }
       my @righttruncationscores = ();
       foreach my $gene (split(/,/,$rightgenenames)) {
@@ -180,15 +167,9 @@ foreach my $vcfline (<IN>) {
 	  push @righttruncationscores, maxcscore($rightchrom, max($genestart,$rightstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else { ## Minus strand
 	  push @righttruncationscores,maxcscore($rightchrom, $genestart, min($genestop,$rightstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
-
 	}
       }
-#      print Dumper(@lefttruncationscores) if $linenum == 1105; ## DEBUG
-      #print "\n" . scalar @lefttruncationscores . "\n" if $linenum == 1105; ##DEBUG
-      #print "$leftgenenames\n" if $linenum == 1105; ## DEBUG
-      #print "$lefttruncationscores[0]\n" if $linenum == 1105; ## DEBUG
       my $lefttruncationscore = (@lefttruncationscores ? max(@lefttruncationscores) : "NoLeftGenes");
-#      die; ## DEBUG
 
       my $righttruncationscore = (@righttruncationscores ? max(@righttruncationscores) : "NoRightGenes");
       $spanscore = "$lefttruncationscore,$righttruncationscore";
