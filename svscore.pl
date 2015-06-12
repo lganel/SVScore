@@ -90,7 +90,7 @@ open(IN, "< $preprocessedfile") || die "Could not open $preprocessedfile: $!";
 my %processedids = ();
 my $outputfile = "$prefix.scored.txt" ;
 open(OUT, "> $outputfile") || die "Could not open output file: $!";
-print OUT "Span_score\tSpan_genenames\tSpan_exon\tLeft_score\tLeft_genenames\tLeft_exon\tRight_score\tRight_genenames\tRight_exon\n";
+print OUT "ID\tSpan_score\tSpan_genenames\tSpan_exon\tLeft_score\tLeft_genenames\tLeft_exon\tRight_score\tRight_genenames\tRight_exon\n";
 
 print STDERR "Entering loop\n" if $debug;
 my $linenum = 1;
@@ -103,7 +103,7 @@ foreach my $vcfline (<IN>) {
   my ($mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop);
 
   $info =~ /SVTYPE=(\w+);/;
-  my $svtype = $1;
+  my $svtype = substr($1,0,3);
   my ($spanexongenenames,$spangenenames) = getfields($info,"ExonGeneNames","Gene");
   my ($leftexongenenames,$leftgenenames) = getfields($info,"left_ExonGeneNames","left_Gene");
   my @leftgenenames = split(/,/,$leftgenenames);
@@ -142,7 +142,7 @@ foreach my $vcfline (<IN>) {
   # Calculate maximum C score depending on SV type
   if ($svtype eq "DEL" || $svtype eq "DUP") {
     if ($rightstop - $leftstart > 1000000) { ## Hack to avoid extracting huge regions from CADD file
-      print OUT "$svtype too big at line $linenum: $leftstart-$rightstop";
+      print OUT "$svtype too big at line $linenum: $leftstart-$rightstop\n";
       $linenum++;
       next;
     }
@@ -204,31 +204,23 @@ foreach my $vcfline (<IN>) {
   }
 
   # For all types except INS, multiply left and right scores respectively if exon/gene is hit
-  if ($leftexongenenames && $svtype ne "INS") {
-    $leftscore *= 1.5;
-  } elsif ($leftgenenames && $svtype ne "INS") {
-    $leftscore *= 1.2;
-  }
-  if ($rightexongenenames && $svtype ne "INS") {
-    $rightscore *= 1.5;
-  } elsif ($rightgenenames && $svtype ne "INS") {
-    $rightscore *= 1.2;
-  }
+  #if ($leftexongenenames && $svtype ne "INS") {
+  #  $leftscore *= 1.5;
+  #} elsif ($leftgenenames && $svtype ne "INS") {
+  #  $leftscore *= 1.2;
+  #}
+  #if ($rightexongenenames && $svtype ne "INS") {
+  #  $rightscore *= 1.5;
+  #} elsif ($rightgenenames && $svtype ne "INS") {
+  #  $rightscore *= 1.2;
+  #}
 
   # We don't like empty strings
   unless ($spangenenames) {
-#    if ($svtype eq "BND" || $svtype eq "INV") {
-#      $spangenenames = "$svtype:IgnoredSpan";
-#    } else {
-      $spangenenames = "NoGenesInSpan";
-#    }
+    $spangenenames = "NoGenesInSpan";
   }
   unless ($spanexongenenames) {
-#    if ($svtype eq "BND" || $svtype eq "INV") {
-#      $spangenenames = "$svtype:IgnoredSpan";
-#    } else {
-      $spanexongenenames = "NoExonsInSpan";
-#    }
+    $spanexongenenames = "NoExonsInSpan";
   }
   unless ($leftgenenames) {
     $leftgenenames = "NoGenesInLeftBreakend";
@@ -242,7 +234,7 @@ foreach my $vcfline (<IN>) {
   unless ($rightexongenenames) {
     $rightexongenenames = "NoExonsInRightBreakend";
   } 
-  print OUT "$spanscore\t$spangenenames\t$spanexongenenames\t$leftscore\t$leftgenenames\t$leftexongenenames\t$rightscore\t$rightgenenames\t$rightexongenenames\n";
+  print OUT "$id\t$spanscore\t$spangenenames\t$spanexongenenames\t$leftscore\t$leftgenenames\t$leftexongenenames\t$rightscore\t$rightgenenames\t$rightexongenenames\n";
 
   $linenum++;
 }
