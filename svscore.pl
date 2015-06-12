@@ -13,6 +13,7 @@
 use strict;
 use Getopt::Std;
 use List::Util qw(max min);
+#use Data::Dumper; ## DEBUG
 
 my %options = ();
 getopts('dzas',\%options);
@@ -29,12 +30,12 @@ my $support = defined $options{'s'};
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files if necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 unless (-s 'refGene.exons.b37.bed') { # Generate exon file if necessary
   print STDERR "Generating exon file\n" if $debug;
-  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -V -k 1,1 -k 2,2 -k 3,3 > refGene.exons.b37.bed");
+  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -V -k 1,1 -k 2,2 -k 3,3 | uniq > refGene.exons.b37.bed");
 }
 
 unless (-s 'refGene.genes.b37.bed') { # Generate gene file if necessary
   print STDERR "Generating gene file\n" if $debug;
-  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$4,\$13}' OFS=\"\\t\" | sort -V -k 1,1 -k 2,2 -k 3,3 > refGene.genes.b37.bed");
+  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$4,\$13}' OFS=\"\\t\" | sort -V -k 1,1 -k 2,2 -k 3,3 | uniq > refGene.genes.b37.bed");
 }
 
 unless (-s 'introns.bed') { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
@@ -53,8 +54,7 @@ unless ($annotated || -s "conf.toml") {
 }
 
 print STDERR "Preparing preprocessing command\n" if $debug;
-$ARGV[0] =~ /^(.*)\.vcf$/;
-my $prefix = $1;
+my ($prefix) = ($ARGV[0] =~ /^(.*)\.vcf$/);
 my $preprocessedfile;
 if (!$compressed && $annotated) { # No need to copy the file if it's already preprocessed
   $preprocessedfile = $ARGV[0];
@@ -109,16 +109,17 @@ foreach my $vcfline (<IN>) {
   my @leftgenenames = split(/,/,$leftgenenames);
   my ($rightexongenenames,$rightgenenames) = getfields($info,"right_ExonGeneNames","right_Gene");
   my @rightgenenames = split(/,/,$rightgenenames);
+  my $leftintrons = getfields($info, "left_Intron") if $svtype eq 'BND' || $svtype eq 'INV';
+  my $rightintrons = getfields($info, "right_Intron") if $svtype eq 'BND' || $svtype eq 'INV';
 
   if ($svtype eq 'BND') {
-    $id =~ /(\d+)_(?:1|2)/;
-    my $mateid = $1;
+    my ($mateid) = ($id =~ /(\d+)_(?:1|2)/);
     if (exists $processedids{$mateid}) { # Is this the second mate of this BND seen? If so, get annotations for first mate. Otherwise, store in %processedids for later when other mate is found
-      ($leftexongenenames, $leftgenenames) = @{$processedids{$mateid}}; # Left side comes from primary mate
+      ($rightexongenenames, $rightgenenames, $rightintrons) = @{$processedids{$mateid}}; # "Right side" comes from primary mate - assumes left and right treated equally later (currently true)
       delete $processedids{$mateid};
-      ($rightchrom,$rightpos) = ($alt =~ /N?[\[\]](.*):(\d+)/); # Grab right breakend coordinates
+      ($rightchrom,$rightpos) = ($alt =~ /N?[\[\]](.*):(\d+)/); # Grab right (primary) breakend coordinates
     } else {
-      $processedids{$mateid} = [$leftexongenenames,$leftgenenames];
+      $processedids{$mateid} = [$leftexongenenames,$leftgenenames, $leftintrons];
       $linenum++;
       next;
     }
@@ -137,7 +138,7 @@ foreach my $vcfline (<IN>) {
   $rightstop = $rightpos + $ciend[1];
 
   my ($spanscore, $leftscore, $rightscore);
-   
+  #print "\nLeftgenenames: $leftgenenames; Rightgenenames: $rightgenenames\n" if $linenum == 1105; ## DEBUG
 
   # Calculate maximum C score depending on SV type
   if ($svtype eq "DEL" || $svtype eq "DUP") {
@@ -153,8 +154,6 @@ foreach my $vcfline (<IN>) {
     $leftscore = maxcscore($leftchrom, $leftstart, $leftstop);
     $rightscore = maxcscore($rightchrom, $rightstart, $rightstop);
 
-    my $leftintrons = getfields($info, "left_Intron");
-    my $rightintrons = getfields($info, "right_Intron");
     my %leftintrons = map {$_ => 1} (split(/,/,$leftintrons));
     my @rightintrons = split(/,/,$rightintrons);
     ## At worst, $leftintrons and $rightintrons are lists of introns. The only case in which the gene is not disrupted is if both lists are equal and nonempty, meaning that in every gene hit by this variant, both ends of the variant are confined to the same intron
@@ -163,6 +162,7 @@ foreach my $vcfline (<IN>) {
       $spanscore = "${svtype}SameIntrons" if $sameintrons;
       $spanscore = "${svtype}NoGenes" unless $sameintrons;
     } else { # Consider variant to be truncating the gene(s)
+#      print "\nLeft: $leftchrom, $leftstart, $leftstop, $leftgenenames; Right: $rightchrom, $rightstart, $rightstop, $rightgenenames\n" if $linenum == 1105; ## DEBUG
       my @lefttruncationscores = ();
       foreach my $gene (split(/,/,$leftgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}}[1..3];	
@@ -171,6 +171,7 @@ foreach my $vcfline (<IN>) {
 	} else { ## Minus strand
 	  push @lefttruncationscores,maxcscore($leftchrom, $genestart, min($genestop,$leftstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
+#      print "$lefttruncationscores[0]\n" if $linenum == 1105; ## DEBUG
       }
       my @righttruncationscores = ();
       foreach my $gene (split(/,/,$rightgenenames)) {
@@ -182,7 +183,12 @@ foreach my $vcfline (<IN>) {
 
 	}
       }
+#      print Dumper(@lefttruncationscores) if $linenum == 1105; ## DEBUG
+      #print "\n" . scalar @lefttruncationscores . "\n" if $linenum == 1105; ##DEBUG
+      #print "$leftgenenames\n" if $linenum == 1105; ## DEBUG
+      #print "$lefttruncationscores[0]\n" if $linenum == 1105; ## DEBUG
       my $lefttruncationscore = (@lefttruncationscores ? max(@lefttruncationscores) : "NoLeftGenes");
+#      die; ## DEBUG
 
       my $righttruncationscore = (@righttruncationscores ? max(@righttruncationscores) : "NoRightGenes");
       $spanscore = "$lefttruncationscore,$righttruncationscore";
@@ -267,8 +273,8 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
   my $info = shift @_;
   my @ans;
   foreach my $i (0..$#_) {
-    my @tmp = ($info =~ /(?:;|^)$_[$i]=(.*?)(?:;|$)/);
-    push @ans, (@tmp>0 ? $tmp[0] : "");
+    my ($ann) = ($info =~ /(?:;|^)$_[$i]=(.*?)(?:;|$)/);
+    push @ans, ($ann ? $ann : "");
   }
   if (@ans > 1) {
     return @ans;
