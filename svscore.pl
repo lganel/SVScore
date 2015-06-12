@@ -1,5 +1,9 @@
 #!/usr/bin/perl -w
 
+## Author: Liron Ganel
+## Laboratory of Ira Hall, McDonnell Genome Institute
+## Washington University in St. Louis
+## Version 0.1
 
 use strict;
 use Getopt::Std;
@@ -17,10 +21,11 @@ my $annotated = defined $options{'a'};
 my $support = defined $options{'s'};
 my $cadd = defined $options{'c'};
 
+&main::HELP_MESSAGE() && die unless defined $ARGV[0] || $support;
+
 my $caddfile = ($cadd ? $options{'c'} : '/gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz');
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
-##TODO PRIORITY 1: Usage message
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression (if necessary), annotation using vcfanno, and generation of intron/exon/gene files if necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 unless (-s 'refGene.exons.b37.bed') { # Generate exon file if necessary
@@ -49,7 +54,6 @@ unless ($annotated || -s "conf.toml") {
 }
 
 print STDERR "Preparing preprocessing command\n" if $debug;
-die unless defined $ARGV[0];
 my ($prefix) = ($ARGV[0] =~ /^(.*)\.vcf$/);
 my $preprocessedfile;
 if (!$compressed && $annotated) { # No need to copy the file if it's already preprocessed
