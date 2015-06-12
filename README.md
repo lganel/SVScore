@@ -5,11 +5,12 @@ Still under active development
 
 # Usage
 ```
-usage: ./svscore.pl [-dza] vcf
+usage: ./svscore.pl [-dzas] [-c file] vcf
   -d	Debug (verbose) mode, keeps intermediate and supporting files
   -z	Indicates that vcf is gzipped
   -a	Indicates that vcf has already been annotated using vcfanno
   -s	Create/download supporting files and quit
+  -c	Used to point to whole_genome_SNVs.tsv.gz
 
   vcf must be sorted naturally (e.g. chromosome 1, chromosome 2,...,chromosome 9, chromosome 10,...)
 ```

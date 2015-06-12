@@ -6,18 +6,20 @@ use Getopt::Std;
 use List::Util qw(max min);
 
 my %options = ();
-getopts('dzas',\%options);
+getopts('dzasc:',\%options);
 
 my $compressed = defined $options{'z'};
 my $debug = defined $options{'d'};
 my $annotated = defined $options{'a'};
 my $support = defined $options{'s'};
+my $cadd = defined $options{'c'};
+
+my $caddfile = ($cadd ? $options{'c'} : '/gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz');
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
-##TODO PRIORITY 1: Enable option for pointing to CADD file
 ##TODO PRIORITY 1: Usage message
 
-# Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files if necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
+# Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression (if necessary), annotation using vcfanno, and generation of intron/exon/gene files if necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 unless (-s 'refGene.exons.b37.bed') { # Generate exon file if necessary
   print STDERR "Generating exon file\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -V -k 1,1 -k 2,2 -k 3,3 | uniq > refGene.exons.b37.bed");
@@ -44,6 +46,7 @@ unless ($annotated || -s "conf.toml") {
 }
 
 print STDERR "Preparing preprocessing command\n" if $debug;
+die unless defined $ARGV[0];
 my ($prefix) = ($ARGV[0] =~ /^(.*)\.vcf$/);
 my $preprocessedfile;
 if (!$compressed && $annotated) { # No need to copy the file if it's already preprocessed
@@ -136,12 +139,12 @@ foreach my $vcfline (<IN>) {
       $linenum++;
       next;
     }
-    $spanscore = maxcscore($leftchrom, $leftstart, $rightstop);
-    $leftscore = maxcscore($leftchrom, $leftstart, $leftstop);
-    $rightscore = maxcscore($rightchrom, $rightstart, $rightstop);
+    $spanscore = maxcscore($caddfile, $leftchrom, $leftstart, $rightstop);
+    $leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
+    $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
   } elsif ($svtype eq "INV" || $svtype eq "BND") {
-    $leftscore = maxcscore($leftchrom, $leftstart, $leftstop);
-    $rightscore = maxcscore($rightchrom, $rightstart, $rightstop);
+    $leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
+    $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
 
     my %leftintrons = map {$_ => 1} (split(/,/,$leftintrons));
     my @rightintrons = split(/,/,$rightintrons);
@@ -155,18 +158,18 @@ foreach my $vcfline (<IN>) {
       foreach my $gene (split(/,/,$leftgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}}[1..3];	
 	if ($genestrand eq '+') {
-	  push @lefttruncationscores, maxcscore($leftchrom, max($genestart,$leftstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+	  push @lefttruncationscores, maxcscore($caddfile, $leftchrom, max($genestart,$leftstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else { ## Minus strand
-	  push @lefttruncationscores,maxcscore($leftchrom, $genestart, min($genestop,$leftstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
+	  push @lefttruncationscores,maxcscore($caddfile, $leftchrom, $genestart, min($genestop,$leftstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
       }
       my @righttruncationscores = ();
       foreach my $gene (split(/,/,$rightgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}}[1..3];	
 	if ($genestrand eq '+') {
-	  push @righttruncationscores, maxcscore($rightchrom, max($genestart,$rightstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+	  push @righttruncationscores, maxcscore($caddfile, $rightchrom, max($genestart,$rightstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else { ## Minus strand
-	  push @righttruncationscores,maxcscore($rightchrom, $genestart, min($genestop,$rightstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
+	  push @righttruncationscores,maxcscore($caddfile, $rightchrom, $genestart, min($genestop,$rightstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
       }
       my $lefttruncationscore = (@lefttruncationscores ? max(@lefttruncationscores) : "NoLeftGenes");
@@ -177,8 +180,8 @@ foreach my $vcfline (<IN>) {
     $spangenenames = "$svtype:IgnoredSpan";
     $spanexongenenames = "$svtype:IgnoredSpan";
   } elsif ($svtype eq "INS") { # leftscore is base before insertion, rightscore is base after insertion
-    $leftscore = maxcscore($leftchrom, $leftstart-1, $leftstart-1);
-    $rightscore = maxcscore($rightchrom, $rightstart+1, $rightstart+1);
+    $leftscore = maxcscore($caddfile, $leftchrom, $leftstart-1, $leftstart-1);
+    $rightscore = maxcscore($caddfile, $rightchrom, $rightstart+1, $rightstart+1);
     $spanscore = "INS";
     $spangenenames = "INS";
     $spanexongenenames = "INS";
@@ -239,9 +242,9 @@ foreach my $vcfline (<IN>) {
 unlink "$preprocessedfile" unless (!$compressed && $annotated) || $debug;
 
 sub maxcscore { # Calculate maximum C score within a given region using CADD data
-  my ($chrom, $start, $stop) = @_;
+  my ($filename, $chrom, $start, $stop) = @_;
   my @scores = ();
-  my $tabixoutput = `tabix /gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz $chrom:$start-$stop`;
+  my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
   my @tabixoutputlines = split(/\n/,$tabixoutput);
   foreach my $taboutline (@tabixoutputlines) {
     push @scores, split(/,/,(split(/\s+/,$taboutline))[4]);
