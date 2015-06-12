@@ -8,7 +8,7 @@
 # Requires refGene.exons.b37.bed and refGene.genes.b37.bed (from generate_files.sh script)
 # Creates file of introns using bedtools subtract on the above two files
 # Annotation done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-# Assumes input vcf is sorted
+# Assumes input vcf is sorted naturally (e.g. chromosome 1, chromosome 2,...,chromosome 9, chromosome 10,...)
 
 use strict;
 use Getopt::Std;
@@ -25,7 +25,6 @@ my $support = defined $options{'s'};
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
 ##TODO PRIORITY 1: Enable option for pointing to CADD file
 ##TODO PRIORITY 1: Usage message
-##TODO PRIORITY 1: README
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files if necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 unless (-s 'refGene.exons.b37.bed') { # Generate exon file if necessary
@@ -49,7 +48,7 @@ unless ($annotated || -s "conf.toml") {
   print STDERR "Writing config file\n" if $debug;
   $wroteconfig = 1;
   open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-  print CONFIG "[[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"refGene.genes.b37.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
+  print CONFIG "[[annotation]]\nfile=\"refGene.genes.b37.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
   close CONFIG;
 }
 
@@ -66,7 +65,7 @@ if (!$compressed && $annotated) { # No need to copy the file if it's already pre
 
   # Execute preprocessing command
   print STDERR "Preprocessing command: $preprocess\n" if $debug;
-  die "vcfanno failed: $!" if system("preprocess");
+  die "vcfanno failed: $!" if system("$preprocess");
 
   unlink "conf.toml" if $wroteconfig && !$debug;
 }
@@ -106,7 +105,6 @@ foreach my $vcfline (<IN>) {
   $info =~ /SVTYPE=(\w+);/;
   my $svtype = $1;
   my ($spanexongenenames,$spangenenames) = getfields($info,"ExonGeneNames","Gene");
-  print "Spangenenames: $spangenenames\nSpanexongenenames: $spanexongenenames\n" if $debug; ## DEBUG
   my ($leftexongenenames,$leftgenenames) = getfields($info,"left_ExonGeneNames","left_Gene");
   my @leftgenenames = split(/,/,$leftgenenames);
   my ($rightexongenenames,$rightgenenames) = getfields($info,"right_ExonGeneNames","right_Gene");
@@ -188,9 +186,9 @@ foreach my $vcfline (<IN>) {
 
       my $righttruncationscore = (@righttruncationscores ? max(@righttruncationscores) : "NoRightGenes");
       $spanscore = "$lefttruncationscore,$righttruncationscore";
-      $spangenenames = "$svtype:IgnoredSpan";
-      $spanexongenenames = "$svtype:IgnoredSpan";
     }
+    $spangenenames = "$svtype:IgnoredSpan";
+    $spanexongenenames = "$svtype:IgnoredSpan";
   } elsif ($svtype eq "INS") { # leftscore is base before insertion, rightscore is base after insertion
     $leftscore = maxcscore($leftchrom, $leftstart-1, $leftstart-1);
     $rightscore = maxcscore($rightchrom, $rightstart+1, $rightstart+1);
@@ -222,18 +220,18 @@ foreach my $vcfline (<IN>) {
 
   # We don't like empty strings
   unless ($spangenenames) {
-    if ($svtype eq "BND" || $svtype eq "INV") {
-      $spangenenames = "$svtype:IgnoredSpan";
-    } else {
+#    if ($svtype eq "BND" || $svtype eq "INV") {
+#      $spangenenames = "$svtype:IgnoredSpan";
+#    } else {
       $spangenenames = "NoGenesInSpan";
-    }
+#    }
   }
   unless ($spanexongenenames) {
-    if ($svtype eq "BND" || $svtype eq "INV") {
-      $spangenenames = "$svtype:IgnoredSpan";
-    } else {
+#    if ($svtype eq "BND" || $svtype eq "INV") {
+#      $spangenenames = "$svtype:IgnoredSpan";
+#    } else {
       $spanexongenenames = "NoExonsInSpan";
-    }
+#    }
   }
   unless ($leftgenenames) {
     $leftgenenames = "NoGenesInLeftBreakend";
@@ -269,8 +267,8 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
   my $info = shift @_;
   my @ans;
   foreach my $i (0..$#_) {
-    $info =~ /(?:;|^)$_[$i]=(.*?)(?:;|$)/;
-    push @ans, ($1 ? $1 : "");
+    my @tmp = ($info =~ /(?:;|^)$_[$i]=(.*?)(?:;|$)/);
+    push @ans, (@tmp>0 ? $tmp[0] : "");
   }
   if (@ans > 1) {
     return @ans;
