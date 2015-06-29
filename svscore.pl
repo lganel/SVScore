@@ -3,7 +3,7 @@
 ## Author: Liron Ganel
 ## Laboratory of Ira Hall, McDonnell Genome Institute
 ## Washington University in St. Louis
-## Version 0.1
+## Version 0.2
 
 use strict;
 use Getopt::Std;
@@ -26,6 +26,8 @@ my $cadd = defined $options{'c'};
 my $caddfile = ($cadd ? $options{'c'} : '/gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz');
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
+##TODO PRIORITY 2: Remove -a option
+##TODO PRIORITY 2: Avoid writing to header file
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 unless (-s 'refGene.exons.b37.bed' || $annotated) { # Generate exon file if necessary
