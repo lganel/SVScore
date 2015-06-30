@@ -15,22 +15,22 @@ $main::VERSION = '0.2';
 my %options = ();
 getopts('dzasc:',\%options);
 
-my $compressed = defined $options{'z'};
 my $debug = defined $options{'d'};
-my $annotated = defined $options{'a'};
 my $support = defined $options{'s'};
 my $cadd = defined $options{'c'};
 
 &main::HELP_MESSAGE() && die unless defined $ARGV[0] || $support;
 
 my $caddfile = ($cadd ? $options{'c'} : '/gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz');
+my $compressed = ($ARGV[0] =~ /\.gz$/);
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
-##TODO PRIORITY 2: Remove -a option
-##TODO PRIORITY 2: Avoid writing to header file
+##TODO PRIORITY 2: Remove -a option...Done
+##TODO PRIORITY 1: Update header...Done
+##TODO PRIORITY 2: Automatically detect whether file is gzipped - remove -z option...Done
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
-unless (-s 'refGene.exons.b37.bed' || $annotated) { # Generate exon file if necessary
+unless (-s 'refGene.exons.b37.bed') { # Generate exon file if necessary
   print STDERR "Generating exon file\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -k 1,1 -k 2,2n | uniq > refGene.exons.b37.bed");
 }
@@ -40,14 +40,14 @@ unless (-s 'refGene.genes.b37.bed') { # Generate gene file if necessary
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$4,\$13}' OFS=\"\\t\" | sort -k 1,1 -k 2,2n | uniq > refGene.genes.b37.bed");
 }
 
-unless (-s 'introns.bed' || $annotated) { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
+unless (-s 'introns.bed') { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
   print STDERR "Generating intron file\n" if $debug;
   system("bedtools subtract -a refGene.genes.b37.bed -b refGene.exons.b37.bed | sort -u -k 1,1 -k 2,2n | awk '{print \$0 \"\t\" NR}' > introns.bed");
 }
 
 my $wroteconfig = 0;
 # Write conf.toml file
-unless ($annotated || -s "conf.toml") {
+unless (-s "conf.toml") {
   print STDERR "Writing config file\n" if $debug;
   $wroteconfig = 1;
   open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
@@ -58,15 +58,41 @@ unless ($annotated || -s "conf.toml") {
 print STDERR "Preparing preprocessing command\n" if $debug;
 my ($prefix) = ($ARGV[0] =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
 my $preprocessedfile = "$prefix.preprocess.vcf";
-my $annotatedfile = ($annotated ? $ARGV[0] : "$prefix.ann.vcf");
-#die if -s "${prefix}header"; ## TODO: Make this pretty
+die "Please rename ${prefix}header so SVScore does not overwrite it" if -s "${prefix}header";
 # Create preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | " . ($annotated ? "" : "vcfanno -ends conf.toml - > $annotatedfile; ") . "grep '^#' " . ($annotated ? "" : "$annotatedfile ") . "> ${prefix}header; grep -v '^#' $annotatedfile | sort -k 3,3 | cat ${prefix}header - > $preprocessedfile; rm -f ${prefix}header";
+die "Preprocessing failed: $!" if system(my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | vcfanno -ends conf.toml - > $prefix.ann.vcf; grep '^#' $prefix.ann.vcf > ${prefix}header");
+
+# Update header
+open(HEADER, "${prefix}header") || die "Could not open ${prefix}header: $!";
+my @newheader = ();
+my @oldheader = <HEADER>;
+close HEADER;
+my $headerline;
+while(($headerline = (shift @oldheader)) !~ /^##INFO/) {
+  push @newheader, $headerline;
+}
+unshift @oldheader, $headerline; # Return first info line to top of stack
+while(($headerline = (shift @oldheader)) =~ /^##INFO/) {
+  push @newheader, $headerline;
+}
+unshift @oldheader, $headerline; # Return first format line to top of stack
+
+push @newheader, "##INFO=<ID=SVSCORE_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant\">\n";
+push @newheader, "##INFO=<ID=SVSCORE_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant\">\n";
+push @newheader, "##INFO=<ID=SVSCORE_SPAN,Number=1,Type=Float,Description=\"Maximum C score in outer span of structural variant\">\n";
+push @newheader, "##INFO=<ID=SVSCORE_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of gene\">\n";
+push @newheader, "##INFO=<ID=SVSCORE_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of gene\">\n";
+push @newheader, @oldheader;
+open(HEADER, "> ${prefix}header") || die "Could not open ${prefix}header: $!";
+foreach (@newheader) {
+  print HEADER;
+}
+
+my $preprocess2 = "grep -v '^#' $prefix.ann.vcf | sort -k 3,3 | cat ${prefix}header - > $preprocessedfile; rm -f ${prefix}header $prefix.ann.vcf";
 
 # Execute preprocessing command
-print STDERR "Preprocessing command: $preprocess\n" if $debug;
-die "vcfanno failed: $!" if system("$preprocess");
-unlink "$annotatedfile" unless $debug || $annotated;
+print STDERR "Preprocessing command: $preprocess\n$preprocess2\n" if $debug;
+die "Preprocessing2 failed: $!" if system("$preprocess2");
 unlink "conf.toml" if $wroteconfig && !$debug;
 
 die if $support;
@@ -308,10 +334,8 @@ sub getflags { # Parse info field of VCF line, testing whether fields specified 
 }
 
 sub main::HELP_MESSAGE() {
-  print "usage: ./svscore.pl [-dzas] [-c file] vcf
+  print "usage: ./svscore.pl [-ds] [-c file] vcf
     -d	      Debug (verbose) mode, keeps intermediate and supporting files
-    -z	      Indicates that vcf is gzipped
-    -a	      Indicates that vcf has already been annotated using vcfanno
     -s	      Create/download supporting files and quit
     -c	      Used to point to whole_genome_SNVs.tsv.gz
     --help    Display this message

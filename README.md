@@ -18,10 +18,8 @@ Still under active development
 
 # Usage
 ```
-usage: ./svscore.pl [-dzas] [-c file] vcf
+usage: ./svscore.pl [-ds] [-c file] vcf
     -d        Debug (verbose) mode, keeps intermediate and supporting files
-    -z        Indicates that vcf is gzipped
-    -a        Indicates that vcf has already been annotated using vcfanno
     -s        Create/download supporting files and quit
     -c        Used to point to whole_genome_SNVs.tsv.gz
     --help    Display this message
@@ -40,3 +38,7 @@ usage: ./svscore.pl [-dzas] [-c file] vcf
 
 # Notes
 SVScore creates a file of introns (unless a file called introns.bed already exists in the current directory) by subtracting the exon file from the gene file using bedtools
+
+SVScore will clobber any files in the current directory with the name {prefix}header, where {prefix} is the input filename without the .vcf suffix
+
+Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompressed input files should not end with this suffix.
