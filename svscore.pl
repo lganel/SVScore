@@ -25,9 +25,6 @@ my $caddfile = ($cadd ? $options{'c'} : '/gscmnt/gc2719/halllab/src/gemini/data/
 my $compressed = ($ARGV[0] =~ /\.gz$/);
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
-##TODO PRIORITY 2: Remove -a option...Done
-##TODO PRIORITY 1: Update header...Done
-##TODO PRIORITY 2: Automatically detect whether file is gzipped - remove -z option...Done
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 unless (-s 'refGene.exons.b37.bed') { # Generate exon file if necessary
