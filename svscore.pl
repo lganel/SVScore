@@ -59,9 +59,9 @@ print STDERR "Preparing preprocessing command\n" if $debug;
 my ($prefix) = ($ARGV[0] =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
 my $preprocessedfile = "$prefix.preprocess.vcf";
 my $annotatedfile = ($annotated ? $ARGV[0] : "$prefix.ann.vcf");
-#die if -s "header"; ## TODO: Make this pretty
+#die if -s "${prefix}header"; ## TODO: Make this pretty
 # Create preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | " . ($annotated ? "" : "vcfanno -ends conf.toml - > $annotatedfile; ") . "grep '^#' " . ($annotated ? "" : "$annotatedfile ") . "> header; grep -v '^#' $annotatedfile | sort -k 3,3 | cat header - > $preprocessedfile; rm -f header";
+my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | " . ($annotated ? "" : "vcfanno -ends conf.toml - > $annotatedfile; ") . "grep '^#' " . ($annotated ? "" : "$annotatedfile ") . "> ${prefix}header; grep -v '^#' $annotatedfile | sort -k 3,3 | cat ${prefix}header - > $preprocessedfile; rm -f ${prefix}header";
 
 # Execute preprocessing command
 print STDERR "Preprocessing command: $preprocess\n" if $debug;
@@ -72,15 +72,15 @@ unlink "conf.toml" if $wroteconfig && !$debug;
 die if $support;
 
 print STDERR "Reading gene list\n" if $debug;
-my %genes = (); # Symbol => (chrom, start, stop, strand)
+my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
 open(GENES, "< refGene.genes.b37.bed") || die "Could not open refGene.genes.b37.bed: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
   my ($genechrom, $genestart, $genestop, $genestrand, $genesymbol) = split(/\s+/,$geneline);
-  if (defined $genes{$genesymbol}) { ## Assume chromosome and strand stay constant
-    $genes{$genesymbol}->[1] = min($genes{$genesymbol}->[1], $genestart);
-    $genes{$genesymbol}->[2] = max($genes{$genesymbol}->[2], $genestop);
+  if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume chromosome and strand stay constant
+    $genes{$genesymbol}->{$genechrom}->[0] = min($genes{$genesymbol}->{$genechrom}->[0], $genestart);
+    $genes{$genesymbol}->{$genechrom}->[1] = max($genes{$genesymbol}->{$genechrom}->[1], $genestop);
   } else {
-    $genes{$genesymbol} = [$genechrom, $genestart, $genestop, $genestrand];
+    $genes{$genesymbol}->{$genechrom} = [$genestart, $genestop, $genestrand];
   }
 }
 
@@ -166,7 +166,9 @@ foreach my $vcfline (<IN>) {
     $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
     $info .= ";SVSCORE_SPAN=$spanscore;SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore";
   } elsif ($svtype eq "INV" || $svtype eq "BND") {
+    print STDERR "Left: $leftchrom: $leftstart-$leftstop\n" if $debug; ## DEBUG
     $leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
+    print STDERR "Right: $rightchrom: $rightstart-$rightstop\n" if $debug; ## DEBUG
     $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
     my ($sameintrons,@lefttruncationscores,@righttruncationscores,$lefttruncationscore,$righttruncationscore,%leftintrons,@rightintrons) = ();
     %leftintrons = map {$_ => 1} (split(/,/,$leftintrons));
@@ -178,19 +180,23 @@ foreach my $vcfline (<IN>) {
       $spanscore = "${svtype}NoGenes" unless $sameintrons;
     } else { # Consider variant to be truncating the gene(s)
       foreach my $gene (split(/,/,$leftgenenames)) {
-	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}}[1..3];	
+	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$leftchrom}}[0..2];	
 	if ($genestrand eq '+') {
+	  print STDERR "Left trunc $gene: $leftchrom: " . max($genestart,$leftstart) . "-$genestop\n" if $debug; ## DEBUG
 	  push @lefttruncationscores, maxcscore($caddfile, $leftchrom, max($genestart,$leftstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else { ## Minus strand
+	  print STDERR "Left trunc $gene: $leftchrom: $genestart-" . min($genestop,$leftstop) . "\n" if $debug; ## DEBUG
 	  push @lefttruncationscores,maxcscore($caddfile, $leftchrom, $genestart, min($genestop,$leftstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
       }
       $lefttruncationscore = max(@lefttruncationscores) if @lefttruncationscores;
       foreach my $gene (split(/,/,$rightgenenames)) {
-	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}}[1..3];	
+	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$rightchrom}}[0..2];	
 	if ($genestrand eq '+') {
+	  print STDERR "Right trunc $gene: $rightchrom: " . max($genestart,$rightstart) . "-$genestop\n" if $debug; ## DEBUG
 	  push @righttruncationscores, maxcscore($caddfile, $rightchrom, max($genestart,$rightstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else { ## Minus strand
+	  print STDERR "Right trunc $gene: $rightchrom: $genestart-" . min($genestop,$rightstop) . "\n" if $debug; ## DEBUG
 	  push @righttruncationscores,maxcscore($caddfile, $rightchrom, $genestart, min($genestop,$rightstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
 	($genestart,$genestop,$genestrand) = (); # Get rid of old variables
@@ -259,7 +265,7 @@ foreach my $i (sort {$chroms[$a] cmp $chroms[$b] || $starts[$a] <=> $starts[$b]}
   print "$outputlines[$i]\n";
 }
 
-unlink "$preprocessedfile" unless (!$compressed && $annotated) || $debug;
+unlink "$preprocessedfile" unless $debug;
 
 sub maxcscore { # Calculate maximum C score within a given region using CADD data
   my ($filename, $chrom, $start, $stop) = @_;
