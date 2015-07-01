@@ -18,10 +18,12 @@ Still under active development
 
 # Usage
 ```
-usage: ./svscore.pl [-ds] [-c file] vcf
+usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] vcf
     -d        Debug (verbose) mode, keeps intermediate and supporting files
     -s        Create/download supporting files and quit
     -c        Used to point to whole_genome_SNVs.tsv.gz
+    -g	      Used to point to gene annotation file
+    -e	      Used to point to exon annotation file
     --help    Display this message
     --version Display version
 ```

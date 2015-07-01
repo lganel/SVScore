@@ -13,33 +13,38 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt 
 $main::VERSION = '0.2';
 
 my %options = ();
-getopts('dzasc:',\%options);
+getopts('dsc:g:e::',\%options);
 
 my $debug = defined $options{'d'};
 my $support = defined $options{'s'};
-my $cadd = defined $options{'c'};
 
 &main::HELP_MESSAGE() && die unless defined $ARGV[0] || $support;
 
-my $caddfile = ($cadd ? $options{'c'} : '/gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz');
+my $caddfile = (defined $options{'c'} ? $options{'c'} : '/gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz');
+my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed');
+my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
 my $compressed = ($ARGV[0] =~ /\.gz$/);
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
-unless (-s 'refGene.exons.b37.bed') { # Generate exon file if necessary
+if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
   print STDERR "Generating exon file\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -k 1,1 -k 2,2n | uniq > refGene.exons.b37.bed");
+} elsif ($exonfile ne 'refGene.exons.b37.bed' && !-s $exonfile) {
+  die "$exonfile not found or empty!";
 }
 
-unless (-s 'refGene.genes.b37.bed') { # Generate gene file if necessary
+if ($genefile eq 'refGene.genes.b37.bed' && !-s $genefile) { # Generate gene file if necessary
   print STDERR "Generating gene file\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$4,\$13}' OFS=\"\\t\" | sort -k 1,1 -k 2,2n | uniq > refGene.genes.b37.bed");
+} elsif ($genefile ne 'refGene.genes.b37.bed' && !-s $genefile) {
+  die "$genefile not found or empty!";
 }
 
 unless (-s 'introns.bed') { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
   print STDERR "Generating intron file\n" if $debug;
-  system("bedtools subtract -a refGene.genes.b37.bed -b refGene.exons.b37.bed | sort -u -k 1,1 -k 2,2n | awk '{print \$0 \"\t\" NR}' > introns.bed");
+  system("bedtools subtract -a $genefile -b $exonfile | sort -u -k 1,1 -k 2,2n | awk '{print \$0 \"\t\" NR}' > introns.bed");
 }
 
 my $wroteconfig = 0;
@@ -48,7 +53,7 @@ unless (-s "conf.toml") {
   print STDERR "Writing config file\n" if $debug;
   $wroteconfig = 1;
   open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-  print CONFIG "[[annotation]]\nfile=\"refGene.genes.b37.bed\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"refGene.exons.b37.bed\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
+  print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
   close CONFIG;
 }
 
@@ -96,7 +101,7 @@ die if $support;
 
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
-open(GENES, "< refGene.genes.b37.bed") || die "Could not open refGene.genes.b37.bed: $!";
+open(GENES, "< $genefile") || die "Could not open $genefile: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
   my ($genechrom, $genestart, $genestop, $genestrand, $genesymbol) = split(/\s+/,$geneline);
   if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume chromosome and strand stay constant
@@ -189,9 +194,7 @@ foreach my $vcfline (<IN>) {
     $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
     $info .= ";SVSCORE_SPAN=$spanscore;SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore";
   } elsif ($svtype eq "INV" || $svtype eq "BND") {
-    print STDERR "Left: $leftchrom: $leftstart-$leftstop\n" if $debug; ## DEBUG
     $leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
-    print STDERR "Right: $rightchrom: $rightstart-$rightstop\n" if $debug; ## DEBUG
     $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
     my ($sameintrons,@lefttruncationscores,@righttruncationscores,$lefttruncationscore,$righttruncationscore,%leftintrons,@rightintrons) = ();
     %leftintrons = map {$_ => 1} (split(/,/,$leftintrons));
@@ -205,10 +208,8 @@ foreach my $vcfline (<IN>) {
       foreach my $gene (split(/,/,$leftgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$leftchrom}}[0..2];	
 	if ($genestrand eq '+') {
-	  print STDERR "Left trunc $gene: $leftchrom: " . max($genestart,$leftstart) . "-$genestop\n" if $debug; ## DEBUG
 	  push @lefttruncationscores, maxcscore($caddfile, $leftchrom, max($genestart,$leftstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else { ## Minus strand
-	  print STDERR "Left trunc $gene: $leftchrom: $genestart-" . min($genestop,$leftstop) . "\n" if $debug; ## DEBUG
 	  push @lefttruncationscores,maxcscore($caddfile, $leftchrom, $genestart, min($genestop,$leftstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
       }
@@ -216,10 +217,8 @@ foreach my $vcfline (<IN>) {
       foreach my $gene (split(/,/,$rightgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$rightchrom}}[0..2];	
 	if ($genestrand eq '+') {
-	  print STDERR "Right trunc $gene: $rightchrom: " . max($genestart,$rightstart) . "-$genestop\n" if $debug; ## DEBUG
 	  push @righttruncationscores, maxcscore($caddfile, $rightchrom, max($genestart,$rightstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else { ## Minus strand
-	  print STDERR "Right trunc $gene: $rightchrom: $genestart-" . min($genestop,$rightstop) . "\n" if $debug; ## DEBUG
 	  push @righttruncationscores,maxcscore($caddfile, $rightchrom, $genestart, min($genestop,$rightstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
 	($genestart,$genestop,$genestrand) = (); # Get rid of old variables
@@ -331,10 +330,12 @@ sub getflags { # Parse info field of VCF line, testing whether fields specified 
 }
 
 sub main::HELP_MESSAGE() {
-  print "usage: ./svscore.pl [-ds] [-c file] vcf
+  print "usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] vcf
     -d	      Debug (verbose) mode, keeps intermediate and supporting files
     -s	      Create/download supporting files and quit
     -c	      Used to point to whole_genome_SNVs.tsv.gz
+    -g	      Used to point to gene annotation file
+    -e	      Used to point to exon annotation file
     --help    Display this message
     --version Display version\n";
 }
