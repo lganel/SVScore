@@ -33,7 +33,7 @@ usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] vcf
 
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from [CADD](http://cadd.gs.washington.edu/download) 
 
-* Your favorite exon- and gene-describing BED files (optional). If you don't have any, svscore.pl will automatically download them (functionality courtesy of Colby Chiang). If using your own files, make sure they are sorted
+* Your favorite exon- and gene-describing BED files (optional). If you don't have any, svscore.pl will automatically download them (functionality courtesy of Colby Chiang). If using your own files, they must be sorted and contain the gene/exon name in column 5
 
 * [bedtools](https://www.github.com/arq5x/bedtools)
 
