@@ -13,7 +13,7 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt 
 $main::VERSION = '0.2';
 
 my %options = ();
-getopts('dsc:g:e::',\%options);
+getopts('dsc:g:e:',\%options);
 
 my $debug = defined $options{'d'};
 my $support = defined $options{'s'};
@@ -47,22 +47,20 @@ unless (-s 'introns.bed') { # Generate intron file if necessary - add column wit
   system("bedtools subtract -a $genefile -b $exonfile | sort -u -k 1,1 -k 2,2n | awk '{print \$0 \"\t\" NR}' > introns.bed");
 }
 
-my $wroteconfig = 0;
 # Write conf.toml file
-unless (-s "conf.toml") {
-  print STDERR "Writing config file\n" if $debug;
-  $wroteconfig = 1;
-  open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-  print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
-  close CONFIG;
-}
+print STDERR "Writing config file\n" if $debug;
+open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
+print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
+close CONFIG;
 
 print STDERR "Preparing preprocessing command\n" if $debug;
 my ($prefix) = ($ARGV[0] =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
 my $preprocessedfile = "$prefix.preprocess.vcf";
 die "Please rename ${prefix}header so SVScore does not overwrite it" if -s "${prefix}header";
+my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | vcfanno -ends conf.toml - > $prefix.ann.vcf; grep '^#' $prefix.ann.vcf > ${prefix}header";
+print STDERR "Preprocessing command 1: $preprocess\n" if $debug;
 # Create preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-die "Preprocessing failed: $!" if system(my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | vcfanno -ends conf.toml - > $prefix.ann.vcf; grep '^#' $prefix.ann.vcf > ${prefix}header");
+die "Preprocessing failed: $!" if system($preprocess);
 
 # Update header
 open(HEADER, "${prefix}header") || die "Could not open ${prefix}header: $!";
@@ -93,9 +91,8 @@ foreach (@newheader) {
 my $preprocess2 = "grep -v '^#' $prefix.ann.vcf | sort -k 3,3 | cat ${prefix}header - > $preprocessedfile; rm -f ${prefix}header $prefix.ann.vcf";
 
 # Execute preprocessing command
-print STDERR "Preprocessing command: $preprocess\n$preprocess2\n" if $debug;
+print STDERR "Preprocessing command 2: $preprocess2\n" if $debug;
 die "Preprocessing2 failed: $!" if system("$preprocess2");
-unlink "conf.toml" if $wroteconfig && !$debug;
 
 die if $support;
 
