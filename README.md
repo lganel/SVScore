@@ -18,12 +18,15 @@ Still under active development
 
 # Usage
 ```
-usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] vcf
+usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-m geneannotationcolumn] [-e exonfile] [-n exonannotationcolumn] vcf
     -d        Debug (verbose) mode, keeps intermediate and supporting files
     -s        Create/download supporting files and quit
     -c        Used to point to whole_genome_SNVs.tsv.gz
-    -g	      Used to point to gene annotation file
-    -e	      Used to point to exon annotation file
+    -g        Used to point to gene BED file
+    -m        Column number for annotation in gene BED file to be added to VCF
+    -e        Used to point to exon BED file
+    -n        Column number for annotation in exon BED file to be added to VCF
+
     --help    Display this message
     --version Display version
 ```
@@ -33,7 +36,7 @@ usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] vcf
 
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from [CADD](http://cadd.gs.washington.edu/download) 
 
-* Your favorite exon- and gene-describing BED files (optional). If you don't have any, svscore.pl will automatically download them (functionality courtesy of Colby Chiang). If using your own files, they must be sorted and contain the gene/exon name in column 5
+* Your favorite exon- and gene-describing BED files (optional). If you don't have any, svscore.pl will automatically download them (functionality courtesy of Colby Chiang). If using your own files, they must be sorted and contain no header, and you must specify (using -m or -n) which column contains the desired annotation
 
 * [bedtools](https://www.github.com/arq5x/bedtools)
 

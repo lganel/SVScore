@@ -13,7 +13,7 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt 
 $main::VERSION = '0.2';
 
 my %options = ();
-getopts('dsc:g:e:',\%options);
+getopts('dsc:g:e:m:n:',\%options);
 
 my $debug = defined $options{'d'};
 my $support = defined $options{'s'};
@@ -23,6 +23,12 @@ my $support = defined $options{'s'};
 my $caddfile = (defined $options{'c'} ? $options{'c'} : '/gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz');
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed');
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
+my $geneanncolumn = (defined $options{'m'} && defined $genefile ? $options{'m'} : 5);
+my $exonanncolumn = (defined $options{'n'} && defined $exonfile ? $options{'n'} : 5);
+warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation file" if defined $options{'m'} && !defined $options{'g'};
+die "Nonstandard gene annotation file without column number - rerun with -m option" if !defined $options{'m'} && defined $options{'g'};
+warn "Exon annotation column provided without nonstandard exon annotation file - defaulting to standard exon annotation file" if defined $options{'n'} && !defined $options{'e'};
+die "Nonstandard exon annotation file without column number - rerun with -n option" if !defined $options{'n'} && defined $options{'e'};
 my $compressed = ($ARGV[0] =~ /\.gz$/);
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
@@ -47,10 +53,12 @@ unless (-s 'introns.bed') { # Generate intron file if necessary - add column wit
   system("bedtools subtract -a $genefile -b $exonfile | sort -u -k 1,1 -k 2,2n | awk '{print \$0 \"\t\" NR}' > introns.bed");
 }
 
+my $intronnumcolumn = `head -n 1 introns.bed | awk '{print NF}'`;
+
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
 open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[6]\nops=[\"uniq\"]";
+print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[$geneanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]";
 close CONFIG;
 
 print STDERR "Preparing preprocessing command\n" if $debug;
@@ -95,6 +103,7 @@ print STDERR "Preprocessing command 2: $preprocess2\n" if $debug;
 die "Preprocessing2 failed: $!" if system("$preprocess2");
 
 die if $support;
+unlink "introns.bed" unless $debug;
 
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
@@ -327,12 +336,15 @@ sub getflags { # Parse info field of VCF line, testing whether fields specified 
 }
 
 sub main::HELP_MESSAGE() {
-  print "usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] vcf
+  print "usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-m geneannotationcolumn] [-e exonfile] [-n exonannotationcolumn] vcf
     -d	      Debug (verbose) mode, keeps intermediate and supporting files
     -s	      Create/download supporting files and quit
     -c	      Used to point to whole_genome_SNVs.tsv.gz
-    -g	      Used to point to gene annotation file
-    -e	      Used to point to exon annotation file
+    -g	      Used to point to gene BED file
+    -m	      Column number for annotation in gene BED file to be added to VCF
+    -e	      Used to point to exon BED file
+    -n	      Column number for annotation in exon BED file to be added to VCF
+
     --help    Display this message
     --version Display version\n";
 }
