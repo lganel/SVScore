@@ -1,5 +1,4 @@
-#!/usr/bin/perl -w
-
+#!/usr/bin/perl -w 
 ## Author: Liron Ganel
 ## Laboratory of Ira Hall, McDonnell Genome Institute
 ## Washington University in St. Louis
@@ -54,6 +53,7 @@ unless (-s 'introns.bed') { # Generate intron file if necessary - add column wit
 }
 
 my $intronnumcolumn = `head -n 1 introns.bed | awk '{print NF}'`;
+chomp $intronnumcolumn;
 
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
@@ -65,7 +65,7 @@ print STDERR "Preparing preprocessing command\n" if $debug;
 my ($prefix) = ($ARGV[0] =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
 my $preprocessedfile = "$prefix.preprocess.vcf";
 die "Please rename ${prefix}header so SVScore does not overwrite it" if -s "${prefix}header";
-my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | vcfanno -ends conf.toml - > $prefix.ann.vcf; grep '^#' $prefix.ann.vcf > ${prefix}header";
+my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1 -k2,2n\" }' | vcfanno -ends conf.toml - > $prefix.ann.vcf; grep '^#' $prefix.ann.vcf > ${prefix}header";
 print STDERR "Preprocessing command 1: $preprocess\n" if $debug;
 # Create preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
 die "Preprocessing failed: $!" if system($preprocess);
@@ -103,7 +103,6 @@ print STDERR "Preprocessing command 2: $preprocess2\n" if $debug;
 die "Preprocessing2 failed: $!" if system("$preprocess2");
 
 die if $support;
-unlink "introns.bed" unless $debug;
 
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
