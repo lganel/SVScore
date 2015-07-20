@@ -31,6 +31,9 @@ die "Nonstandard exon annotation file without column number - rerun with -n opti
 my $compressed = ($ARGV[0] =~ /\.gz$/);
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
+##TODO PRIORITY 2: Enable running with -s without giving filename
+##TODO PRIORITY 1: Preserve header line order
+##TODO PRIORITY 1: Update documentation to describe expected annotation file format
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
@@ -102,14 +105,17 @@ my $preprocess2 = "grep -v '^#' $prefix.ann.vcf | sort -k 3,3 | cat ${prefix}hea
 print STDERR "Preprocessing command 2: $preprocess2\n" if $debug;
 die "Preprocessing2 failed: $!" if system("$preprocess2");
 
-die if $support;
+if ($support) {
+  unlink $preprocessedfile;
+  die;
+}
 
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
 open(GENES, "< $genefile") || die "Could not open $genefile: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
   my ($genechrom, $genestart, $genestop, $genestrand, $genesymbol) = split(/\s+/,$geneline);
-  if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume chromosome and strand stay constant
+  if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume strand stays constant
     $genes{$genesymbol}->{$genechrom}->[0] = min($genes{$genesymbol}->{$genechrom}->[0], $genestart);
     $genes{$genesymbol}->{$genechrom}->[1] = max($genes{$genesymbol}->{$genechrom}->[1], $genestop);
   } else {
@@ -137,8 +143,8 @@ foreach my $vcfline (<IN>) {
 
   my ($svtype) = ($info =~ /SVTYPE=(\w{3})/);
   my ($spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames,$cipos,$ciend) = getfields($info,"ExonGeneNames","Gene","left_ExonGeneNames","left_Gene","right_ExonGeneNames","right_Gene","CIPOS","CIEND");
-  my @leftgenenames = split(/,/,$leftgenenames);
-  my @rightgenenames = split(/,/,$rightgenenames);
+  my @leftgenenames = split(/\|/,$leftgenenames);
+  my @rightgenenames = split(/\|/,$rightgenenames);
   my ($leftintrons,$rightintrons) = getfields($info,"left_Intron","right_Intron") if $svtype eq 'BND' || $svtype eq 'INV';
 
   if ($svtype eq 'BND') {
@@ -202,16 +208,17 @@ foreach my $vcfline (<IN>) {
     $leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
     $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
     my ($sameintrons,@lefttruncationscores,@righttruncationscores,$lefttruncationscore,$righttruncationscore,%leftintrons,@rightintrons) = ();
-    %leftintrons = map {$_ => 1} (split(/,/,$leftintrons));
-    @rightintrons = split(/,/,$rightintrons);
+    %leftintrons = map {$_ => 1} (split(/\|/,$leftintrons));
+    @rightintrons = split(/\|/,$rightintrons);
     ## At worst, $leftintrons and $rightintrons are lists of introns. The only case in which the gene is not disrupted is if both lists are equal and nonempty, meaning that in every gene hit by this variant, both ends of the variant are confined to the same intron
     $sameintrons = scalar (grep {$leftintrons{$_}} @rightintrons) == scalar @rightintrons && scalar @rightintrons > 0;
     if ((!$leftgenenames && !$rightgenenames) || ($svtype eq "INV" && $sameintrons)) { # Either breakends don't hit genes or some genes are involved, but ends of variant are within same intron in each gene hit
       $spanscore = "${svtype}SameIntrons" if $sameintrons;
       $spanscore = "${svtype}NoGenes" unless $sameintrons;
     } else { # Consider variant to be truncating the gene(s)
-      foreach my $gene (split(/,/,$leftgenenames)) {
+      foreach my $gene (split(/\|/,$leftgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$leftchrom}}[0..2];	
+	die "$id, $gene" unless defined $genestrand; ## DEBUG
 	if ($genestrand eq '+') {
 	  push @lefttruncationscores, maxcscore($caddfile, $leftchrom, max($genestart,$leftstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else { ## Minus strand
@@ -219,8 +226,9 @@ foreach my $vcfline (<IN>) {
 	}
       }
       $lefttruncationscore = max(@lefttruncationscores) if @lefttruncationscores;
-      foreach my $gene (split(/,/,$rightgenenames)) {
+      foreach my $gene (split(/\|/,$rightgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$rightchrom}}[0..2];	
+	die "$id, $rightgenenames, $gene" unless defined $genestrand; ## DEBUG
 	if ($genestrand eq '+') {
 	  push @righttruncationscores, maxcscore($caddfile, $rightchrom, max($genestart,$rightstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else { ## Minus strand
