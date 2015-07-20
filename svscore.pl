@@ -22,18 +22,18 @@ my $support = defined $options{'s'};
 my $caddfile = (defined $options{'c'} ? $options{'c'} : '/gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz');
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed');
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
-my $geneanncolumn = (defined $options{'m'} && defined $genefile ? $options{'m'} : 5);
+#my $geneanncolumn = (defined $options{'m'} && defined $genefile ? $options{'m'} : 5);
 my $exonanncolumn = (defined $options{'n'} && defined $exonfile ? $options{'n'} : 5);
-warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation file" if defined $options{'m'} && !defined $options{'g'};
-die "Nonstandard gene annotation file without column number - rerun with -m option" if !defined $options{'m'} && defined $options{'g'};
+#warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation file" if defined $options{'m'} && !defined $options{'g'};
+#die "Nonstandard gene annotation file without column number - rerun with -m option" if !defined $options{'m'} && defined $options{'g'};
 warn "Exon annotation column provided without nonstandard exon annotation file - defaulting to standard exon annotation file" if defined $options{'n'} && !defined $options{'e'};
 die "Nonstandard exon annotation file without column number - rerun with -n option" if !defined $options{'n'} && defined $options{'e'};
-my $compressed = ($ARGV[0] =~ /\.gz$/);
+my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
+my $preprocessedfile;
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
 ##TODO PRIORITY 2: Enable running with -s without giving filename
-##TODO PRIORITY 1: Preserve header line order
-##TODO PRIORITY 1: Update documentation to describe expected annotation file format
+##TODO PRIORITY 1: Dump unmatched BND lines at end of execution
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
@@ -61,52 +61,54 @@ chomp $intronnumcolumn;
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
 open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[$geneanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]";
+print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]";
 close CONFIG;
 
-print STDERR "Preparing preprocessing command\n" if $debug;
-my ($prefix) = ($ARGV[0] =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
-my $preprocessedfile = "$prefix.preprocess.vcf";
-die "Please rename ${prefix}header so SVScore does not overwrite it" if -s "${prefix}header";
-my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1 -k2,2n\" }' | vcfanno -ends conf.toml - > $prefix.ann.vcf; grep '^#' $prefix.ann.vcf > ${prefix}header";
-print STDERR "Preprocessing command 1: $preprocess\n" if $debug;
 # Create preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-die "Preprocessing failed: $!" if system($preprocess);
+  if (defined $ARGV[0]) {
+  print STDERR "Preparing preprocessing command\n" if $debug;
+  my ($prefix) = ($ARGV[0] =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
+  $preprocessedfile = "$prefix.preprocess.vcf";
+  die "Please rename ${prefix}header so SVScore does not overwrite it" if -s "${prefix}header";
+  my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1 -k2,2n\" }' | vcfanno -ends conf.toml - > $prefix.ann.vcf; grep '^#' $prefix.ann.vcf > ${prefix}header"; # Sort, annotate, grab header
+  print STDERR "Preprocessing command 1: $preprocess\n" if $debug;
+  die "Preprocessing failed: $!" if system($preprocess);
 
-# Update header
-open(HEADER, "${prefix}header") || die "Could not open ${prefix}header: $!";
-my @newheader = ();
-my @oldheader = <HEADER>;
-close HEADER;
-my $headerline;
-while(($headerline = (shift @oldheader)) !~ /^##INFO/) {
-  push @newheader, $headerline;
-}
-unshift @oldheader, $headerline; # Return first info line to top of stack
-while(($headerline = (shift @oldheader)) =~ /^##INFO/) {
-  push @newheader, $headerline;
-}
-unshift @oldheader, $headerline; # Return first format line to top of stack
+  # Update header
+  open(HEADER, "${prefix}header") || die "Could not open ${prefix}header: $!";
+  my @newheader = ();
+  my @oldheader = <HEADER>;
+  close HEADER;
+  my $headerline;
+  while(($headerline = (shift @oldheader)) !~ /^##INFO/) {
+    push @newheader, $headerline;
+  }
+  unshift @oldheader, $headerline; # Return first info line to top of stack
+  while(($headerline = (shift @oldheader)) =~ /^##INFO/) {
+    push @newheader, $headerline;
+  }
+  unshift @oldheader, $headerline; # Return first format line to top of stack
 
-push @newheader, "##INFO=<ID=SVSCORE_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant\">\n";
-push @newheader, "##INFO=<ID=SVSCORE_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant\">\n";
-push @newheader, "##INFO=<ID=SVSCORE_SPAN,Number=1,Type=Float,Description=\"Maximum C score in outer span of structural variant\">\n";
-push @newheader, "##INFO=<ID=SVSCORE_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of gene\">\n";
-push @newheader, "##INFO=<ID=SVSCORE_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of gene\">\n";
-push @newheader, @oldheader;
-open(HEADER, "> ${prefix}header") || die "Could not open ${prefix}header: $!";
-foreach (@newheader) {
-  print HEADER;
-}
+  push @newheader, "##INFO=<ID=SVSCORE_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant\">\n";
+  push @newheader, "##INFO=<ID=SVSCORE_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant\">\n";
+  push @newheader, "##INFO=<ID=SVSCORE_SPAN,Number=1,Type=Float,Description=\"Maximum C score in outer span of structural variant\">\n";
+  push @newheader, "##INFO=<ID=SVSCORE_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of gene\">\n";
+  push @newheader, "##INFO=<ID=SVSCORE_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of gene\">\n";
+  push @newheader, @oldheader;
+  open(HEADER, "> ${prefix}header") || die "Could not open ${prefix}header: $!";
+  foreach (@newheader) {
+    print HEADER;
+  }
 
-my $preprocess2 = "grep -v '^#' $prefix.ann.vcf | sort -k 3,3 | cat ${prefix}header - > $preprocessedfile; rm -f ${prefix}header $prefix.ann.vcf";
+  my $preprocess2 = "grep -v '^#' $prefix.ann.vcf | sort -k 3,3 | cat ${prefix}header - > $preprocessedfile; rm -f ${prefix}header $prefix.ann.vcf"; # Sort by ID, add new header, clean up
 
 # Execute preprocessing command
-print STDERR "Preprocessing command 2: $preprocess2\n" if $debug;
-die "Preprocessing2 failed: $!" if system("$preprocess2");
+  print STDERR "Preprocessing command 2: $preprocess2\n" if $debug;
+  die "Preprocessing2 failed: $!" if system("$preprocess2");
+}
 
 if ($support) {
-  unlink $preprocessedfile;
+  unlink $preprocessedfile if defined $ARGV[0];
   die;
 }
 
@@ -191,11 +193,6 @@ foreach my $vcfline (<IN>) {
 
   # Calculate maximum C score depending on SV type
   if ($svtype eq "DEL" || $svtype eq "DUP") {
-    #if ($rightstop - $leftstart > 1000000) { ## Hack to avoid extracting huge regions from CADD file
-    #  print STDERR "$svtype too big at line $linenum: $leftstart-$rightstop\n";
-    #  $linenum++;
-    #  next;
-    #}
     if ($rightstop - $leftstart > 1000000) {
       $spanscore = 100;
     } else {
@@ -332,23 +329,12 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
   }
 }
 
-sub getflags { # Parse info field of VCF line, testing whether fields specified in @_ exist in the line. $_[0] must be the info field itself. Returns list of 0s and 1s if more than one field is being requested; otherwise, returns a scalar value representing the requested field
-  my $info = shift @_;
-  my @ans;
-  foreach my $field (@_) {
-    my $ann = ($info =~ /(?:;|^)$field(?:[=;]|$)/);
-    push @ans, ($ann ? 1 : 0);
-  }
-  $info = undef;
-}
-
 sub main::HELP_MESSAGE() {
-  print "usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-m geneannotationcolumn] [-e exonfile] [-n exonannotationcolumn] vcf
+  print "usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] [-n exonannotationcolumn] vcf
     -d	      Debug (verbose) mode, keeps intermediate and supporting files
     -s	      Create/download supporting files and quit
     -c	      Used to point to whole_genome_SNVs.tsv.gz
     -g	      Used to point to gene BED file
-    -m	      Column number for annotation in gene BED file to be added to VCF
     -e	      Used to point to exon BED file
     -n	      Column number for annotation in exon BED file to be added to VCF
 
