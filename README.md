@@ -46,13 +46,9 @@ usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] [-n exonanno
   * Gene annotation files must have at least five columns, representing, in order:
 
     1. Chromosome number (with no "chr" prefix)
-
     2. Start coordinate
-    
     3. Stop coordinate
-    
     4. Strand
-    
     5. Gene symbol/name/other identifier
 
 
