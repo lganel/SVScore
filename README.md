@@ -33,11 +33,27 @@ usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] [-n exonanno
 # Dependencies
 * [vcfanno](https://www.github.com/brentp/vcfanno)
 
+* [bedtools](https://www.github.com/arq5x/bedtools)
+
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from [CADD](http://cadd.gs.washington.edu/download) 
 
-* Your favorite tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download them (functionality courtesy of Colby Chiang). If using your own exon file, you must use -n to specify which column contains the desired annotation (typically gene symbol or gene name). Files must be sorted and contain no header. Gene annotation files must have at least five columns, representing chromosome number (with no "chr" prefix), start coordinate, stop coordinate, strand, and gene symbol, in this order
+* Your favorite tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download them (functionality courtesy of Colby Chiang).
 
-* [bedtools](https://www.github.com/arq5x/bedtools)
+  * If using your own exon file, you must use -n to specify which column contains the desired annotation (typically gene symbol or gene name).
+
+  * Files must be sorted and contain no header.
+  
+  * Gene annotation files must have at least five columns, representing, in order:
+
+    1. Chromosome number (with no "chr" prefix)
+
+    2. Start coordinate
+    
+    3. Stop coordinate
+    
+    4. Strand
+    
+    5. Gene symbol/name/other identifier
 
 
 # Notes
