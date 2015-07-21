@@ -32,7 +32,6 @@ my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
 my $preprocessedfile;
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
-##TODO PRIORITY 2: Enable running with -s without giving filename
 ##TODO PRIORITY 1: Dump unmatched BND lines at end of execution
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
