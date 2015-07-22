@@ -12,7 +12,7 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt 
 $main::VERSION = '0.2';
 
 my %options = ();
-getopts('dsc:g:e:m:n:',\%options);
+getopts('dsc:g:e:n:',\%options);
 
 my $debug = defined $options{'d'};
 my $support = defined $options{'s'};
@@ -33,6 +33,7 @@ my $preprocessedfile;
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
 ##TODO PRIORITY 1: Dump unmatched BND lines at end of execution
+##TODO PRIORITY 1: Replace $vcfline with $i
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
@@ -126,12 +127,16 @@ foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, st
 
 open(IN, "< $preprocessedfile") || die "Could not open $preprocessedfile: $!";
 
-my %processedids = ();
+#my %processedids = ();
 my @outputlines;
+my $lastbndmateid = "";
+print STDERR "Reading input file\n" if $debug;
+my @inputlines = <IN>;
 
 print STDERR "Entering loop\n" if $debug;
 my $linenum = 1;
-foreach my $vcfline (<IN>) {
+foreach my $i (0..$#inputlines) {
+  my $vcfline = $inputlines[$i];
   if ($vcfline =~ /^#/) {
     $linenum++;
     print $vcfline;
@@ -140,7 +145,7 @@ foreach my $vcfline (<IN>) {
   # Parse line
   my @splitline = split(/\s+/,$vcfline);
   my ($leftchrom, $leftpos, $id, $alt, $info) = @splitline[0..2, 4, 7];
-  my ($mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,@cipos,@ciend,$mateoutputline,@splitmateline,$mateinfo,$mateline);
+  my ($mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,@cipos,@ciend,$mateoutputline,@splitmateline,$mateinfo,$mateline,$singletonbnd);
 
   my ($svtype) = ($info =~ /SVTYPE=(\w{3})/);
   my ($spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames,$cipos,$ciend) = getfields($info,"ExonGeneNames","Gene","left_ExonGeneNames","left_Gene","right_ExonGeneNames","right_Gene","CIPOS","CIEND");
@@ -148,32 +153,47 @@ foreach my $vcfline (<IN>) {
   my @rightgenenames = split(/\|/,$rightgenenames);
   my ($leftintrons,$rightintrons) = getfields($info,"left_Intron","right_Intron") if $svtype eq 'BND' || $svtype eq 'INV';
 
+
   if ($svtype eq 'BND') {
-    my ($mateid) = ($id =~ /(\d+)_(?:1|2)/);
-    if (exists $processedids{$mateid}) { # Is this the second mate of this BND seen? If so, get annotations for first mate. Otherwise, store in %processedids for later when other mate is found
-      my $mateline = $processedids{$mateid};
-      @splitmateline = split(/\s+/,$mateline);
-      $mateinfo = $splitmateline[7];
-      if ($info !~ /SECONDARY/) { # Current line is secondary (right), so mate is primary (left)
-	($leftexongenenames, $leftgenenames, $leftintrons) = getfields($mateinfo,"ExonGeneNames","Gene","Intron");
-	($rightchrom, $rightpos) = ($leftchrom, $leftpos);
-	($leftchrom,$leftpos) = (split(/\s+/,$mateline))[0,1]; # Grab left (primary) breakend coordinates from mate line
-	my $citmp = $cipos; # Switch CIPOS and CIEND
-	$cipos = $ciend;
-	$ciend = $citmp;
-	undef $citmp;
-      } else { # Current line is primary (left), so mate is secondary (right)
-	($rightexongenenames, $rightgenenames, $rightintrons) = getfields($mateinfo,"ExonGeneNames","Gene","Intron");
-	($rightchrom,$rightpos) = (split(/\s+/,$mateline))[0,1]; # Grab right (secondary) breakend coordinates from mate line
+    my ($mateid) = ($id =~ /^(\d+)_(?:1|2)/);
+    my ($nextmateid) = ($i == $#inputlines ? ("") : ((split(/\s+/,$inputlines[$i+1]))[2] =~ /^(\d+)_(?:1|2)/)); # $nextmateid is set to the mateid of the next line, unless the current line is the final line in the file. In this case, $nextmateid is set to the empty string because we know it's not the first mate of a consecutive pair
+    my $firstmate = ($nextmateid && $mateid == $nextmateid); # First mate of a consecutive pair
+    my $secondmate = ($lastbndmateid && $mateid == $lastbndmateid); # Second mate of a consecutive pair
+    $singletonbnd = !($firstmate || $secondmate);
+    if ($secondmate || $singletonbnd) { # Is this the second mate of this BND seen or a singleton BND? If the second of a pair, get annotations for first mate. If a singleton, get rid of one set of annotations
+      $lastbndmateid = "";
+#      my $mateline = $processedids{$mateid};
+      unless ($singletonbnd) {
+	my $mateline = $inputlines[$i-1];
+	@splitmateline = split(/\s+/,$mateline);
+	$mateinfo = $splitmateline[7];
       }
-      delete $processedids{$mateid};
-      undef $mateline;
-    } else { # This is the first time seeing a variant with this ID
-      $processedids{$mateid} = $vcfline;
-      $linenum++;
+      if ($info =~ /SECONDARY/) { # Current line is secondary (right), so mate is primary (left)
+	($leftexongenenames, $leftgenenames, $leftintrons) = ($singletonbnd ? ("","","") : getfields($mateinfo,"ExonGeneNames","Gene","Intron"));
+	($rightchrom, $rightpos) = ($leftchrom, $leftpos);
+	($leftchrom,$leftpos) = ($alt =~ /([\w.]+):(\d+)/);
+#	($leftchrom,$leftpos) = (split(/\s+/,$mateline))[0,1]; # Grab left (primary) breakend coordinates from mate line
+	($cipos, $ciend) = ($ciend, $cipos); # Switch $cipos and $ciend
+      } else { # Current line is primary (left), so mate is secondary (right)
+	#($rightexongenenames, $rightgenenames, $rightintrons) = getfields($mateinfo,"ExonGeneNames","Gene","Intron") unless $singletonbnd;
+	($rightexongenenames, $rightgenenames, $rightintrons) = ($singletonbnd ? ("","","") : getfields($mateinfo,"ExonGeneNames","Gene","Intron"));
+	($rightchrom,$rightpos) = ($alt =~ /([\w.]+):(\d+)/);
+	#($rightchrom,$rightpos) = (split(/\s+/,$mateline))[0,1]; # Grab right (secondary) breakend coordinates from mate line
+      }
+#      delete $processedids{$mateid};
+      undef $mateline unless $singletonbnd;
+    } else { # Must be the first mate of a consecutive pair
+      $lastbndmateid = $mateid;
+#      my ($nextmateid) = ($i == $#inputlines ? ("") : ((split(/\s+/,$inputlines[$i+1]))[2] =~ /^(\d+)_(?:1|2)/)); # $nextmateid is set to the mateid of the next line, unless the current line is the final line in the file. In this case, $nextmateid is set to the empty string so the next if statement goes to the else branch
+#      if ($mateid == $nextmateid) { # First of two consecutive mate lines
       ($leftchrom, $leftpos, $id, $alt, $info,$mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,$svtype,$spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames,@leftgenenames,@rightgenenames,$leftintrons,$rightintrons) = (); ## Get rid of old variables
       next;
     }
+#      $processedids{$mateid} = $vcfline;
+      $linenum++;
+  } else { # Reset $lastbndmateid if variant isn't a BND
+    $lastbndmateid = "";
+    $singletonbnd = 0;
   }
 
   # Calculate start/stop coordinates from POS and CI
@@ -204,14 +224,17 @@ foreach my $vcfline (<IN>) {
     $leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
     $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
     my ($sameintrons,@lefttruncationscores,@righttruncationscores,$lefttruncationscore,$righttruncationscore,%leftintrons,@rightintrons) = ();
-    %leftintrons = map {$_ => 1} (split(/\|/,$leftintrons));
-    @rightintrons = split(/\|/,$rightintrons);
-    ## At worst, $leftintrons and $rightintrons are lists of introns. The only case in which the gene is not disrupted is if both lists are equal and nonempty, meaning that in every gene hit by this variant, both ends of the variant are confined to the same intron
-    $sameintrons = scalar (grep {$leftintrons{$_}} @rightintrons) == scalar @rightintrons && scalar @rightintrons > 0;
-    if ((!$leftgenenames && !$rightgenenames) || ($svtype eq "INV" && $sameintrons)) { # Either breakends don't hit genes or some genes are involved, but ends of variant are within same intron in each gene hit
-      $spanscore = "${svtype}SameIntrons" if $sameintrons;
-      $spanscore = "${svtype}NoGenes" unless $sameintrons;
-    } else { # Consider variant to be truncating the gene(s)
+    unless ($singletonbnd) {
+      %leftintrons = map {$_ => 1} (split(/\|/,$leftintrons));
+      @rightintrons = split(/\|/,$rightintrons);
+      ## At worst, $leftintrons and $rightintrons are lists of introns. The only case in which the gene is not disrupted is if both lists are equal and nonempty, meaning that in every gene hit by this variant, both ends of the variant are confined to the same intron
+      $sameintrons = scalar (grep {$leftintrons{$_}} @rightintrons) == scalar @rightintrons && scalar @rightintrons > 0;
+    }
+    if (($leftgenenames || $rightgenenames) && ($singletonbnd || !$sameintrons)) { # Gene is being truncated - left or right breakend hits a gene, and the breakends are not confined to the same introns (or, if the variant is a singleton BND, this latter condition is not necessary)
+#    if ((!$leftgenenames && !$rightgenenames) || (!$singletonbnd && $sameintrons)) { # Either breakends don't hit genes or some genes are involved, but ends of variant are within same intron in each gene hit
+#      $spanscore = "${svtype}SameIntrons" if $sameintrons; ## TODO: Remove these
+#      $spanscore = "${svtype}NoGenes" unless $sameintrons;
+ #   } else { # Consider variant to be truncating the gene(s)
       foreach my $gene (split(/\|/,$leftgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$leftchrom}}[0..2];	
 	die "$id, $gene" unless defined $genestrand; ## DEBUG
@@ -236,7 +259,7 @@ foreach my $vcfline (<IN>) {
     }
     ($sameintrons, %leftintrons,@rightintrons) = (); # Get rid of old variables
     $info .= ";SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore" . (defined $lefttruncationscore ? ";SVSCORE_LTRUNC=$lefttruncationscore" : "") . (defined $righttruncationscore ? ";SVSCORE_RTRUNC=$righttruncationscore" : "");
-    $mateinfo .= ";SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore" . (defined $lefttruncationscore ? ";SVSCORE_LTRUNC=$lefttruncationscore" : "") . (defined $righttruncationscore ? ";SVSCORE_RTRUNC=$righttruncationscore" : "") if $svtype eq "BND";
+    $mateinfo .= ";SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore" . (defined $lefttruncationscore ? ";SVSCORE_LTRUNC=$lefttruncationscore" : "") . (defined $righttruncationscore ? ";SVSCORE_RTRUNC=$righttruncationscore" : "") if $svtype eq "BND" && !$singletonbnd;
     (@lefttruncationscores,@righttruncationscores,$lefttruncationscore,$righttruncationscore) = (); # Get rid of old variables
   } elsif ($svtype eq "INS") { # leftscore is base before insertion, rightscore is base after insertion
     $leftscore = maxcscore($caddfile, $leftchrom, $leftstart-1, $leftstart-1);
@@ -267,15 +290,15 @@ foreach my $vcfline (<IN>) {
   #}
 
   my $outputline = "";
-  $mateoutputline = "" if $svtype eq "BND";
+  $mateoutputline = "" if $svtype eq "BND" && !$singletonbnd;
   foreach my $i (0..$#splitline) { # Build output line
     $outputline .= (($i == 7 ? $info : $splitline[$i]) . ($i < $#splitline ? "\t" : ""));
-    $mateoutputline .= (($i == 7 ? $mateinfo : $splitmateline[$i]) . ($i < $#splitline ? "\t" : "")) if $svtype eq "BND";
+    $mateoutputline .= (($i == 7 ? $mateinfo : $splitmateline[$i]) . ($i < $#splitline ? "\t" : "")) if $svtype eq "BND" && !$singletonbnd;
   }
   push @outputlines, $outputline;
-  push @outputlines, $mateoutputline if $svtype eq "BND";
+  push @outputlines, $mateoutputline if $svtype eq "BND" && !$singletonbnd;
 
-  ($leftchrom, $leftpos, $id, $alt, $info,$mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,$svtype,$spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames,@leftgenenames,@rightgenenames,$leftintrons,$rightintrons,$rightchrom,$rightpos,$spanscore,$leftscore,$rightscore,$cipos,$ciend,@cipos,@ciend,$spanscore,$leftscore,$rightscore,$outputline,$mateoutputline,@splitmateline,$mateline,$mateinfo) = (); # Get rid of old variables
+  ($leftchrom, $leftpos, $id, $alt, $info,$mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,$svtype,$spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames,@leftgenenames,@rightgenenames,$leftintrons,$rightintrons,$rightchrom,$rightpos,$leftscore,$rightscore,$cipos,$ciend,@cipos,@ciend,$spanscore,$leftscore,$rightscore,$outputline,$mateoutputline,@splitmateline,$mateline,$mateinfo) = (); # Get rid of old variables
 
   print STDERR $linenum, " " if $debug;
   $linenum++;

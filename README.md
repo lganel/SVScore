@@ -52,8 +52,12 @@ usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] [-n exonanno
 
 
 # Notes
-SVScore creates a file of introns (unless a file called introns.bed already exists in the current directory) by subtracting the exon file from the gene file using bedtools
+SVScore creates a file of introns (unless a file called introns.bed already exists in the current directory) by subtracting the exon file from the gene file using bedtools. So, if there is already file called introns.bed in the current directory, rename it or SVScore will not work correctly.
 
 SVScore will clobber any files in the current directory with the name {prefix}header, where {prefix} is the input filename without the .vcf suffix
 
 Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompressed input files should not end with this suffix.
+
+For BND variants, primary mate is considered the left breakend and the secondary mate is considered the right breakend.
+
+If only one mate line of a BND variant is present in the VCF file, left and right breakend scores are still calculated, as well as one truncation score if applicable (whether it is the left or right truncation score depends on whether the line describes a primary or secondary mate).
