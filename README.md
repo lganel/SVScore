@@ -3,19 +3,6 @@ Prioritize structural variants based on annotations and C scores
 
 Still under active development
 
-# Changes in version 0.2
-* Outputs sorted VCF to standard output, no longer creates *.scored.txt file
-
-* Relaxed stringency on SVTYPE field
-
-* File prefix now disregards path prefix to always work in current directory
-
-* Removed natural sort requirement. SVScore now automatically sorts input VCF based on ID
-
-* Returns a negative score for variants in regions with no C scores (e.g. GL contigs)
-
-* Returns a score of 100 for deletions/duplications above 1 Mbp
-
 # Usage
 ```
 usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] [-n exonannotationcolumn] vcf
