@@ -200,12 +200,7 @@ foreach my $i (0..$#inputlines) {
 
   # Calculate maximum C score depending on SV type
   if ($svtype eq "DEL" || $svtype eq "DUP") {
-    my $spanscore;
-    if ($rightstop - $leftstart > 1000000) {
-      $spanscore = 100;
-    } else {
-      $spanscore = maxcscore($caddfile, $leftchrom, $leftstart, $rightstop);
-    }
+    my $spanscore = ($rightstop - $leftstart > 1000000 ? 100 : maxcscore($caddfile, $leftchrom, $leftstart, $rightstop));
     $leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
     $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
     $info .= ";SVSCORE_SPAN=$spanscore;SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore";

@@ -33,7 +33,7 @@ usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] [-n exonanno
 # Dependencies
 * [vcfanno](https://www.github.com/brentp/vcfanno)
 
-* [bedtools](https://www.github.com/arq5x/bedtools)
+* [bedtools](https://www.github.com/arq5x/bedtools2)
 
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from [CADD](http://cadd.gs.washington.edu/download) 
 
