@@ -12,7 +12,7 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt 
 $main::VERSION = '0.2';
 
 my %options = ();
-getopts('dsc:g:e:n:',\%options);
+getopts('dsc:g:e:n:C:',\%options);
 
 my $debug = defined $options{'d'};
 my $support = defined $options{'s'};
@@ -20,18 +20,17 @@ my $support = defined $options{'s'};
 &main::HELP_MESSAGE() && die unless defined $ARGV[0] || $support;
 
 my $caddfile = (defined $options{'c'} ? $options{'c'} : '/gscmnt/gc2719/halllab/src/gemini/data/whole_genome_SNVs.tsv.compressed.gz');
+my $compressedcaddfile = (defined $options{'C'} ? $options{'C'} : 'cadd_v1.2.idx');
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed');
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
-#my $geneanncolumn = (defined $options{'m'} && defined $genefile ? $options{'m'} : 5);
 my $exonanncolumn = (defined $options{'n'} && defined $exonfile ? $options{'n'} : 5);
-#warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation file" if defined $options{'m'} && !defined $options{'g'};
-#die "Nonstandard gene annotation file without column number - rerun with -m option" if !defined $options{'m'} && defined $options{'g'};
 warn "Exon annotation column provided without nonstandard exon annotation file - defaulting to standard exon annotation file" if defined $options{'n'} && !defined $options{'e'};
 die "Nonstandard exon annotation file without column number - rerun with -n option" if !defined $options{'n'} && defined $options{'e'};
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
 my $preprocessedfile;
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
+##TODO PRIORITY 2: Remove exongenenames variables, remove annotation w/ exon file and -n option
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
@@ -59,7 +58,7 @@ chomp $intronnumcolumn;
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
 open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]";
+print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]\n\n[caddidx]\nfile=\"$compressedcaddfile\"\nnames=[\"CADD\"]\nops=[\"max\"]";
 close CONFIG;
 
 # Create preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
@@ -126,7 +125,6 @@ foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, st
 
 open(IN, "< $preprocessedfile") || die "Could not open $preprocessedfile: $!";
 
-#my %processedids = ();
 my @outputlines;
 my $lastbndmateid = "";
 print STDERR "Reading input file\n" if $debug;
@@ -142,10 +140,11 @@ foreach my $i (0..$#inputlines) {
   # Parse line
   my @splitline = split(/\s+/,$vcfline);
   my ($leftchrom, $leftpos, $id, $alt, $info) = @splitline[0..2, 4, 7];
-  my ($mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,@cipos,@ciend,$mateoutputline,@splitmateline,$mateinfo,$mateline,$singletonbnd);
+  my ($mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,@cipos,@ciend,@splitmateline,$mateinfo,$mateline,$lefttruncationscore,$righttruncationscore,$singletonbnd,$secondary);
 
   my ($svtype) = ($info =~ /SVTYPE=(\w{3})/);
-  my ($spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames,$cipos,$ciend) = getfields($info,"ExonGeneNames","Gene","left_ExonGeneNames","left_Gene","right_ExonGeneNames","right_Gene","CIPOS","CIEND");
+  my ($spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames) = getfields($info,"ExonGeneNames","Gene","left_ExonGeneNames","left_Gene","right_ExonGeneNames","right_Gene");
+  my ($cipos,$ciend,$spanscore,$leftscore,$rightscore) = getfields($info,"CIPOS","CIEND","CADD","left_CADD","right_CADD");
   my @leftgenenames = split(/\|/,$leftgenenames);
   my @rightgenenames = split(/\|/,$rightgenenames);
   my ($leftintrons,$rightintrons) = getfields($info,"left_Intron","right_Intron") if $svtype eq 'BND' || $svtype eq 'INV';
@@ -164,7 +163,7 @@ foreach my $i (0..$#inputlines) {
 	@splitmateline = split(/\s+/,$mateline);
 	$mateinfo = $splitmateline[7];
       }
-      if ($info =~ /SECONDARY/) { # Current line is secondary (right), so mate is primary (left)
+      if ($secondary = ($info =~ /SECONDARY/)) { # Current line is secondary (right), so mate is primary (left)
 	($leftexongenenames, $leftgenenames, $leftintrons) = ($singletonbnd ? ("","","") : getfields($mateinfo,"ExonGeneNames","Gene","Intron"));
 	($rightchrom, $rightpos) = ($leftchrom, $leftpos);
 	($leftchrom,$leftpos) = ($alt =~ /([\w.]+):(\d+)/);
@@ -196,19 +195,18 @@ foreach my $i (0..$#inputlines) {
   $rightstart = $rightpos + $ciend[0] - 1;
   $rightstop = $rightpos + $ciend[1];
 
-  my ($leftscore, $rightscore);
-
   # Calculate maximum C score depending on SV type
-  if ($svtype eq "DEL" || $svtype eq "DUP") {
-    my $spanscore = ($rightstop - $leftstart > 1000000 ? 100 : maxcscore($caddfile, $leftchrom, $leftstart, $rightstop));
-    $leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
-    $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
-    $info .= ";SVSCORE_SPAN=$spanscore;SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore";
-    undef $spanscore;
-  } elsif ($svtype eq "INV" || $svtype eq "BND") {
-    $leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
-    $rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
-    my ($sameintrons,@lefttruncationscores,@righttruncationscores,$lefttruncationscore,$righttruncationscore,%leftintrons,@rightintrons) = ();
+  #if ($svtype eq "DEL" || $svtype eq "DUP") {
+#    my $spanscore = ($rightstop - $leftstart > 1000000 ? 100 : maxcscore($caddfile, $leftchrom, $leftstart, $rightstop));
+    #$leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
+    #$rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
+   # $info .= ";SVSCORE_SPAN=$spanscore;SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore";
+   # undef $spanscore;
+  #} elsif ($svtype eq "INV" || $svtype eq "BND") {
+  if ($svtype eq "INV" || $svtype eq "BND") {
+    #$leftscore = maxcscore($caddfile, $leftchrom, $leftstart, $leftstop);
+    #$rightscore = maxcscore($caddfile, $rightchrom, $rightstart, $rightstop);
+    my ($sameintrons,@lefttruncationscores,@righttruncationscores,%leftintrons,@rightintrons) = ();
     unless ($singletonbnd) {
       %leftintrons = map {$_ => 1} (split(/\|/,$leftintrons));
       @rightintrons = split(/\|/,$rightintrons);
@@ -216,38 +214,39 @@ foreach my $i (0..$#inputlines) {
       $sameintrons = scalar (grep {$leftintrons{$_}} @rightintrons) == scalar @rightintrons && scalar @rightintrons > 0;
     }
     if (($leftgenenames || $rightgenenames) && ($singletonbnd || !$sameintrons)) { # Gene is being truncated - left or right breakend hits a gene, and the breakends are not confined to the same introns (or, if the variant is a singleton BND, this latter condition is not necessary)
-      foreach my $gene (split(/\|/,$leftgenenames)) {
-	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$leftchrom}}[0..2];	
-	die "$id, $gene" unless defined $genestrand; ## DEBUG
-	if ($genestrand eq '+') {
-	  push @lefttruncationscores, maxcscore($caddfile, $leftchrom, max($genestart,$leftstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
-	} else { ## Minus strand
-	  push @lefttruncationscores,maxcscore($caddfile, $leftchrom, $genestart, min($genestop,$leftstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
+      unless ($singletonbnd && $secondary) {
+	foreach my $gene (split(/\|/,$leftgenenames)) {
+	  my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$leftchrom}}[0..2];	
+	  if ($genestrand eq '+') {
+	    push @lefttruncationscores, maxcscore($caddfile, $leftchrom, max($genestart,$leftstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+	  } else { ## Minus strand
+	    push @lefttruncationscores,maxcscore($caddfile, $leftchrom, $genestart, min($genestop,$leftstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
+	  }
 	}
       }
       $lefttruncationscore = max(@lefttruncationscores) if @lefttruncationscores;
-      foreach my $gene (split(/\|/,$rightgenenames)) {
-	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$rightchrom}}[0..2];	
-	die "$id, $rightgenenames, $gene" unless defined $genestrand; ## DEBUG
-	if ($genestrand eq '+') {
-	  push @righttruncationscores, maxcscore($caddfile, $rightchrom, max($genestart,$rightstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
-	} else { ## Minus strand
-	  push @righttruncationscores,maxcscore($caddfile, $rightchrom, $genestart, min($genestop,$rightstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
+      unless($singletonbnd && !$secondary) {
+	foreach my $gene (split(/\|/,$rightgenenames)) {
+	  my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$rightchrom}}[0..2];	
+	  if ($genestrand eq '+') {
+	    push @righttruncationscores, maxcscore($caddfile, $rightchrom, max($genestart,$rightstart), $genestop); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+	  } else { ## Minus strand
+	    push @righttruncationscores,maxcscore($caddfile, $rightchrom, $genestart, min($genestop,$rightstop)); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
+	  }
+	  ($genestart,$genestop,$genestrand) = (); # Get rid of old variables
 	}
-	($genestart,$genestop,$genestrand) = (); # Get rid of old variables
       }
       $righttruncationscore = max(@righttruncationscores) if @righttruncationscores;
     }
     ($sameintrons, %leftintrons,@rightintrons) = (); # Get rid of old variables
-    $info .= ";SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore" . (defined $lefttruncationscore ? ";SVSCORE_LTRUNC=$lefttruncationscore" : "") . (defined $righttruncationscore ? ";SVSCORE_RTRUNC=$righttruncationscore" : "");
-    $mateinfo .= ";SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore" . (defined $lefttruncationscore ? ";SVSCORE_LTRUNC=$lefttruncationscore" : "") . (defined $righttruncationscore ? ";SVSCORE_RTRUNC=$righttruncationscore" : "") if $svtype eq "BND" && !$singletonbnd;
+    #$info .= ";SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore" . (defined $lefttruncationscore ? ";SVSCORE_LTRUNC=$lefttruncationscore" : "") . (defined $righttruncationscore ? ";SVSCORE_RTRUNC=$righttruncationscore" : "");
     (@lefttruncationscores,@righttruncationscores,$lefttruncationscore,$righttruncationscore) = (); # Get rid of old variables
   } elsif ($svtype eq "INS") { # leftscore is base before insertion, rightscore is base after insertion
     $leftscore = maxcscore($caddfile, $leftchrom, $leftstart-1, $leftstart-1);
     $rightscore = maxcscore($caddfile, $rightchrom, $rightstart+1, $rightstart+1);
     $info .= ";SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore";
   } else {
-    die "Unrecognized SVTYPE $svtype at line " . $i+1 . " of annotated VCF file\n";
+    die "Unrecognized SVTYPE $svtype at line " . $i+1 . " of preprocessed VCF file\n";
   }
 
   # Multiplier for deletions and duplications which hit an exon, lower multiplier if one of these hits a gene but not an exon. Purposely not done for BND and INV. THESE WILL NEED TO BE PLACED IN ABOVE IF STATEMENT IN THE FUTURE
@@ -269,16 +268,23 @@ foreach my $i (0..$#inputlines) {
   #  $rightscore *= 1.2;
   #}
 
-  my $outputline = "";
-  $mateoutputline = "" if $svtype eq "BND" && !$singletonbnd;
-  foreach my $i (0..$#splitline) { # Build output line
-    $outputline .= (($i == 7 ? $info : $splitline[$i]) . ($i < $#splitline ? "\t" : ""));
-    $mateoutputline .= (($i == 7 ? $mateinfo : $splitmateline[$i]) . ($i < $#splitline ? "\t" : "")) if $svtype eq "BND" && !$singletonbnd;
-  }
-  push @outputlines, $outputline;
-  push @outputlines, $mateoutputline if $svtype eq "BND" && !$singletonbnd;
+  $info .= ";SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore" . (defined $spanscore ? ";SVSCORE_SPAN=$spanscore" : "") . (defined $lefttruncationscore ? ";SVSCORE_LTRUNC=$lefttruncationscore" : "") . (defined $righttruncationscore ? ";SVSCORE_RTRUNC=$righttruncationscore" : "") unless $svtype eq "INS";
+  $mateinfo .= ";SVSCORE_LEFT=$leftscore;SVSCORE_RIGHT=$rightscore" . (defined $lefttruncationscore ? ";SVSCORE_LTRUNC=$lefttruncationscore" : "") . (defined $righttruncationscore ? ";SVSCORE_RTRUNC=$righttruncationscore" : "") if $svtype eq "BND" && !$singletonbnd;
 
-  ($leftchrom, $leftpos, $id, $alt, $info,$mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,$svtype,$spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames,@leftgenenames,@rightgenenames,$leftintrons,$rightintrons,$rightchrom,$rightpos,$leftscore,$rightscore,$cipos,$ciend,@cipos,@ciend,$leftscore,$rightscore,$outputline,$mateoutputline,@splitmateline,$mateline,$mateinfo) = (); # Get rid of old variables
+  $splitline[7] = $info;
+  my $outputline = join("\t",@splitline);
+  push @outputlines, $outputline;
+  if ($svtype eq "BND" && !$singletonbnd) {
+    $splitmateline[7] = $mateinfo;
+    my $mateoutputline = join("\t",@splitmateline);
+    push @outputlines, $mateoutputline;
+  }
+#  foreach my $i (0..$#splitline) { # Build output line
+#    $outputline .= (($i == 7 ? $info : $splitline[$i]) . ($i < $#splitline ? "\t" : ""));
+#    $mateoutputline .= (($i == 7 ? $mateinfo : $splitmateline[$i]) . ($i < $#splitline ? "\t" : "")) if $svtype eq "BND" && !$singletonbnd;
+#  }
+
+  ($leftchrom, $leftpos, $id, $alt, $info,$mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,$svtype,$spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames,@leftgenenames,@rightgenenames,$leftintrons,$rightintrons,$cipos,$ciend,@cipos,@ciend,$spanscore,$leftscore,$rightscore,$outputline,@splitmateline,$mateline,$mateinfo) = (); # Get rid of old variables
 
   print STDERR $i+1, " " if $debug;
 }
@@ -331,13 +337,14 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
 }
 
 sub main::HELP_MESSAGE() {
-  print "usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] [-n exonannotationcolumn] vcf
+  print "usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] [-C binarycaddfile] -c caddfile vcf
     -d	      Debug (verbose) mode, keeps intermediate and supporting files
     -s	      Create/download supporting files and quit
-    -c	      Used to point to whole_genome_SNVs.tsv.gz
-    -g	      Used to point to gene BED file
-    -e	      Used to point to exon BED file
-    -n	      Column number for annotation in exon BED file to be added to VCF
+    -c	      Points to whole_genome_SNVs.tsv.gz
+    -C	      Points to cadd_v1.2.idx (defaults to current directory if not provided)
+    -g	      Used to point to gene BED file (refGene.genes.b37.bed)
+    -e	      Used to point to exon BED file (refGene.exons.b37.bed)
+    -n	      Column number for annotation in exon BED file to be added to VCF (5)
 
     --help    Display this message
     --version Display version\n";

@@ -5,13 +5,14 @@ Still under active development
 
 # Usage
 ```
-usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] [-n exonannotationcolumn] vcf
-    -d        Debug (verbose) mode, keeps intermediate and supporting files
-    -s        Create/download supporting files and quit
-    -c        Used to point to whole_genome_SNVs.tsv.gz
-    -g        Used to point to gene BED file
-    -e        Used to point to exon BED file
-    -n        Column number for annotation in exon BED file to be added to VCF
+usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] [-C binarycaddfile] -c caddfile vcf
+    -d	      Debug (verbose) mode, keeps intermediate and supporting files
+    -s	      Create/download supporting files and quit
+    -c	      Points to whole_genome_SNVs.tsv.gz
+    -C	      Points to cadd_v1.2.idx (defaults to current directory if not provided; *.bin file must be in same directory as index)
+    -g	      Used to point to gene BED file (refGene.genes.b37.bed)
+    -e	      Used to point to exon BED file (refGene.exons.b37.bed)
+    -n	      Column number for annotation in exon BED file to be added to VCF (5)
 
     --help    Display this message
     --version Display version
@@ -19,6 +20,8 @@ usage: ./svscore.pl [-ds] [-c caddfile] [-g genefile] [-e exonfile] [-n exonanno
 
 # Dependencies
 * [vcfanno](https://www.github.com/brentp/vcfanno)
+  * [cadd_v1.2.idx](https://s3.amazonaws.com/vcfanno/cadd_v1.2.idx)
+  * [cadd_v1.2.bin](https://s3.amazonaws.com/vcfanno/cadd_v1.2.bin)
 
 * [bedtools](https://www.github.com/arq5x/bedtools2)
 
@@ -48,3 +51,5 @@ Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompresse
 For BND variants, primary mate is considered the left breakend and the secondary mate is considered the right breakend.
 
 If only one mate line of a BND variant is present in the VCF file, left and right breakend scores are still calculated, as well as one truncation score if applicable (whether it is the left or right truncation score depends on whether the line describes a primary or secondary mate).
+
+Currently, SVScore requires two files containing CADD scores - whole_genome_SNVs.tsv.gz (from the CADD link above) and cadd_v1.2.bin (from the vcfanno link above). This may change in the future. Both files must be in the same directory as their respective index file, available for download via the same links. The files may have any name so long as these names are supplied using the -c and -C options and each file's name matches that of its index (up to the suffix).
