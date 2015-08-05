@@ -20,12 +20,14 @@ usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] 
 
 # Dependencies
 * [vcfanno](https://www.github.com/brentp/vcfanno)
-  * [cadd_v1.2.idx](https://s3.amazonaws.com/vcfanno/cadd_v1.2.idx)
-  * [cadd_v1.2.bin](https://s3.amazonaws.com/vcfanno/cadd_v1.2.bin)
+  * cadd_v1.3a.idx - click [here](https://s3.amazonaws.com/vcfanno/cadd_v1.3a.idx) to download
+  * cadd_v1.3a.bin - click [here](https://s3.amazonaws.com/vcfanno/cadd_v1.3a.bin) to download
 
 * [bedtools](https://www.github.com/arq5x/bedtools2)
 
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from [CADD](http://cadd.gs.washington.edu/download) 
+
+* [tabix](https://github.com/samtools/htslib)
 
 * Your favorite hg19/GRCh37-based, tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download them (functionality courtesy of Colby Chiang).
 
@@ -52,4 +54,4 @@ For BND variants, primary mate is considered the left breakend and the secondary
 
 If only one mate line of a BND variant is present in the VCF file, left and right breakend scores are still calculated, as well as one truncation score if applicable (whether it is the left or right truncation score depends on whether the line describes a primary or secondary mate).
 
-Currently, SVScore requires two files containing CADD scores - whole_genome_SNVs.tsv.gz (from the CADD link above) and cadd_v1.2.bin (from the vcfanno link above). This may change in the future. Both files must be in the same directory as their respective index file, available for download via the same links. The files may have any name so long as these names are supplied using the -c and -C options and each file's name matches that of its index (up to the suffix).
+Currently, SVScore requires two files containing CADD scores - whole_genome_SNVs.tsv.gz (from the CADD link above) and cadd_v1.3a.bin (from the vcfanno link above). This may change in the future. Both files must be in the same directory as their respective index file, available for download via the same links. The files may have any name so long as these names are supplied using the -c and -C options and each file's name matches that of its index (up to the suffix).
