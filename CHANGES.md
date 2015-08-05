@@ -1,6 +1,6 @@
 ## 0.3 (Under development)
  * Compatibility with vfanno v0.0.7, and uses new CADD features to get span and left/right breakend scores
- * Processes BND variants without mates
+ * Processes BND variants without mates, provided CIEND field is present
  * Performance improvement (fixed high memory usage bug)
  * Updates VCF header
  * Automatically detects whether file is gzipped based on filename (removed -z option)
