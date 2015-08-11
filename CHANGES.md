@@ -1,8 +1,9 @@
 ## 0.3 (Under development)
- * Compatibility with vfanno v0.0.7, and uses new CADD features to get span and left/right breakend scores
+ * Compatibility with vfanno v0.0.7
+ * Fixed off-by-one error in coordinates
  * Processes BND variants without mates, provided CIEND field is present
  * Performance improvement (fixed high memory usage bug)
- * Updates VCF header
+ * Updates VCF header with scores added to INFO field
  * Automatically detects whether file is gzipped based on filename (removed -z option)
  * Always calls vcfanno (removed -a option)
  * Added -g, -e, and -n options to allow use of custom gene/exon annotation files
