@@ -20,7 +20,7 @@ usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] 
 ```
 
 # Dependencies
-* A Bash-like shell
+* A Linux-like system with a Bash-like shell
 
 * Perl v5.8.7 or later
 
@@ -34,20 +34,7 @@ usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] 
 
 * Your favorite hg19/GRCh37-based, tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download them (functionality courtesy of Colby Chiang).
 
-  * If using your own exon file, you must use -n to specify which column contains the desired annotation (typically gene symbol or gene name).
-
-  * Files must be sorted and contain no header.
-  
-  * Gene annotation files must have at least five columns, representing, in order:
-    1. Chromosome number (with no "chr" prefix)
-    2. Start coordinate
-    3. Stop coordinate
-    4. Strand
-    5. Gene symbol/name/other identifier
-
-
-# Output
-SVScore outputs a VCF file with the following scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added.
+  * If using your own exon file, you must use -n to specify which column contains the desired annotation (typically gene symbol or gene name). SVScore outputs a VCF file with the following scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added.
   * Under -o max or -o both
       1. SVSCOREMAX_LEFT for all variants - max C score within the left breakend
       2. SVSCOREMAX_RIGHT for all variants - max C score within the right breakend
