@@ -21,25 +21,19 @@ my $weight = defined $options{'w'};
 
 &main::HELP_MESSAGE() && die unless defined $ARGV[0] || $support;
 
-my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.compressed.gz');
+my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed');
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
 my $exonanncolumn = (defined $options{'n'} && defined $exonfile ? $options{'n'} : 5);
 warn "Exon annotation column provided without nonstandard exon annotation file - defaulting to standard exon annotation file" if defined $options{'n'} && !defined $options{'e'};
 die "Nonstandard exon annotation file without column number - rerun with -n option" if !defined $options{'n'} && defined $options{'e'};
-if (defined $options{'o'}) {
-  $options{'o'} =~ tr/[a-z]/[A-Z]/;
-} else {
-  $options{'o'} = 'BOTH';
-}
-my $ops = $options{'o'};
+$options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
+my $ops = (defined $options{'o'} ? $options{'o'} : 'BOTH');
 die "Unrecognized operation specified: $ops" unless ($ops eq 'SUM' || $ops eq 'MAX' || $ops eq 'BOTH');
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
 my $preprocessedfile;
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
-##TODO PRIORITY 1: Ops - max/sum/both
-##TODO PRIORITY 1: Weight probability distributions
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
