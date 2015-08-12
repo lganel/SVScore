@@ -1,5 +1,5 @@
 ## 0.3 (Under development)
- * Compatibility with vfanno v0.0.7
+ * Compatibility with vcfanno v0.0.7
  * Fixed off-by-one error in coordinates
  * Processes BND variants without mates, provided CIEND field is present
  * Performance improvement (fixed high memory usage bug)
