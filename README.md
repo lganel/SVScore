@@ -24,7 +24,7 @@ usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] 
 
 * Perl v5.8.7 or later
 
-* [vcfanno](https://www.github.com/brentp/vcfanno)
+* [vcfanno](https://www.github.com/brentp/vcfanno) v0.0.7
 
 * [bedtools](https://www.github.com/arq5x/bedtools2)
 
@@ -50,8 +50,6 @@ usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] 
 
 # Notes
 SVScore creates a file of introns (unless a file called introns.bed already exists in the current directory) by subtracting the exon file from the gene file using bedtools. So, if there is already file called introns.bed in the current directory, rename it or SVScore will not work correctly.
-
-SVScore will clobber any files in the current directory with the name {prefix}header, where {prefix} is the input filename without the .vcf suffix
 
 Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompressed input files should not end with this suffix.
 

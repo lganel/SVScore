@@ -1,12 +1,13 @@
 ## 0.3 (Under development)
+ * Performance improvement (fixed high memory usage bug)
  * Compatibility with vcfanno v0.0.7
  * Fixed off-by-one error in coordinates
+ * Added -g, -e, and -n options to allow use of custom gene/exon annotation files
  * Processes BND variants without mates, provided CIEND field is present
- * Performance improvement (fixed high memory usage bug)
  * Updates VCF header with scores added to INFO field
+ * Intermediate files are tagged with timestamp to prevent collisions from parallel instances
  * Automatically detects whether file is gzipped based on filename (removed -z option)
  * Always calls vcfanno (removed -a option)
- * Added -g, -e, and -n options to allow use of custom gene/exon annotation files
 
 ## 0.2 (06/29/2015)
  * Outputs sorted VCF to standard output, no longer creates *.scored.txt file

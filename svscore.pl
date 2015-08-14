@@ -8,6 +8,7 @@ use strict;
 use Getopt::Std;
 use List::Util qw(max min sum);
 use List::MoreUtils qw(pairwise);
+use Time::HiRes qw(gettimeofday);
 
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
 $main::VERSION = '0.2';
@@ -31,7 +32,7 @@ $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
 my $ops = (defined $options{'o'} ? $options{'o'} : 'BOTH');
 die "Unrecognized operation specified: $ops" unless ($ops eq 'SUM' || $ops eq 'MAX' || $ops eq 'BOTH');
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
-my $preprocessedfile;
+my ($annfile, $headerfile, $preprocessedfile);
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
 
@@ -64,18 +65,22 @@ open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
 print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]";
 close CONFIG;
 
-# Create preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-  if (defined $ARGV[0]) {
+# Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
+if (defined $ARGV[0]) {
   print STDERR "Preparing preprocessing command\n" if $debug;
   my ($prefix) = ($ARGV[0] =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
-  $preprocessedfile = "$prefix.preprocess.vcf";
-  die "Please rename ${prefix}header so SVScore does not overwrite it" if -s "${prefix}header";
-  my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1 -k2,2n\" }' | vcfanno -ends conf.toml - > $prefix.ann.vcf; grep '^#' $prefix.ann.vcf > ${prefix}header"; # Sort, annotate, grab header
+
+  # Tag intermediate files with timestamp to avoid collisions
+  my $time = gettimeofday();
+  $preprocessedfile = "$prefix.preprocess$time.vcf";
+  $annfile = "$prefix.ann$time.vcf";
+  $headerfile = "${prefix}header$time";
+  my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1 -k2,2n\" }' | vcfanno -ends conf.toml - > $annfile; grep '^#' $annfile > $headerfile"; # Sort, annotate, grab header
   print STDERR "Preprocessing command 1: $preprocess\n" if $debug;
   die "Preprocessing failed: $!" if system($preprocess);
 
   # Update header
-  open(HEADER, "${prefix}header") || die "Could not open ${prefix}header: $!";
+  open(HEADER, "$headerfile") || die "Could not open $headerfile: $!";
   my @newheader = ();
   my @oldheader = <HEADER>;
   close HEADER;
@@ -104,7 +109,7 @@ close CONFIG;
     push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of gene, weighted by probability distribution\">\n";
   }
   push @newheader, @oldheader;
-  open(HEADER, "> ${prefix}header") || die "Could not open ${prefix}header: $!";
+  open(HEADER, "> $headerfile") || die "Could not open $headerfile: $!";
   foreach (@newheader) {
     print HEADER;
   }
@@ -113,12 +118,11 @@ close CONFIG;
     warn "PRPOS not found in header - SVScore will not weight CADD scores\n";
   }
 
-  my $preprocess2 = "grep -v '^#' $prefix.ann.vcf | sort -k 3,3 | cat ${prefix}header - > $preprocessedfile; rm -f ${prefix}header"; # Sort by ID, add new header, clean up
-
-# Execute preprocessing command
+  # Create and execute second preprocessing command
+  my $preprocess2 = "grep -v '^#' $annfile | sort -k 3,3 | cat $headerfile - > $preprocessedfile; rm -f $headerfile"; # Sort by ID, add new header, clean up
   print STDERR "Preprocessing command 2: $preprocess2\n" if $debug;
   die "Preprocessing2 failed: $!" if system("$preprocess2");
-  unlink "$prefix.ann.vcf" || warn "Could not delete $prefix.ann.vcf: $!" unless $debug;
+  unlink "$annfile" || warn "Could not delete $annfile: $!" unless $debug;
 }
 
 if ($support) {
