@@ -1,4 +1,4 @@
-## 0.3 (Under development)
+## 0.3 (08/14/15)
  * Performance improvement (fixed high memory usage bug)
  * Compatibility with vcfanno v0.0.7
  * Fixed off-by-one error in coordinates
