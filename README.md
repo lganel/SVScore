@@ -28,7 +28,7 @@ usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] 
 
 * [bedtools](https://www.github.com/arq5x/bedtools2)
 
-* whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from [CADD](http://cadd.gs.washington.edu/download) 
+* whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from v1.3 of [CADD](http://cadd.gs.washington.edu/download) 
 
 * [tabix](https://github.com/samtools/htslib)
 

@@ -209,7 +209,6 @@ foreach my $i (0..$#inputlines) {
     $singletonbnd = 0;
   }
 
-#  print STDERR "$id\n"; ## DEBUG
   my @probleft = split(/,/,$probleft);
   my @probright = split(/,/,$probright) if $probright;
 
@@ -229,16 +228,13 @@ foreach my $i (0..$#inputlines) {
 
   # Calculate maximum C score depending on SV type
   if ($svtype eq "DEL" || $svtype eq "DUP") {
-#    print STDERR "Calculating spanscore:\n" if $debug; ## DEBUG
     my $spanscore;
     if ($rightstop - $leftstart > 1000000) {
       $spanscore = ($ops eq "BOTH" ? [100, 100] : 100);
     } else {
       $spanscore = cscoreop($caddfile, 0, $ops, $leftchrom, $leftstart, $rightstop, "");
     }
-#    print STDERR "Calculating left score:\n" if $debug; ## DEBUG
     $leftscore = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft);
-#    print STDERR "Calculating right score:\n" if $debug; ## DEBUG
     $rightscore = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright);
     $info .= ($ops eq "BOTH" ? ";SVSCOREMAX_SPAN=$spanscore->[0];SVSCOREMAX_LEFT=$leftscore->[0];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_SPAN=$spanscore->[1];SVSCORESUM_LEFT=$leftscore->[1];SVSCORESUM_RIGHT=$rightscore->[1]" : ";SVSCORE${ops}_SPAN=$spanscore;SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore");
     undef $spanscore;
@@ -359,14 +355,29 @@ sub cscoreop { # Apply operation specified in $ops to C scores within a given re
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
   my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
-#  warn "$chrom:$start-$stop\n" if $weight; ## DEBUG
   my @tabixoutputlines = split(/\n/,$tabixoutput);
-  return ($ops eq 'BOTH' ? [-1, -1] : -1) unless (@tabixoutputlines == $stop-$start+1); # Short circuit if variant hits region with no C scores
-  foreach my $taboutline (@tabixoutputlines) {
-    push @scores, max(split(/,/,(split(/\s+/,$taboutline))[4]));
+  return ($ops eq 'BOTH' ? [-1, -1] : -1) unless (@tabixoutputlines == 3 * ($stop-$start+1)); # Short circuit if variant hits region with no C scores
+  
+  my %allscores = (); # Hash from position to list of scores
+  foreach my $line (@tabixoutputlines) { # Populate hash
+    my @split = split(/\s+/,$line);
+    push @{$allscores{$split[1]}}, $split[5];
   }
-#  warn "Scores: @scores\n\nProbdist: @probdist\n" if $weight; ## DEBUG
-#  die "Scores: ",scalar @scores, "\t", "Probdist: ", scalar @probdist, "\tShould be: ",$stop-$start+1 if ($weight && scalar @scores != scalar @probdist); ## DEBUG
+  foreach my $pos (sort {$a <=> $b}  keys %allscores) { # Populate @scores
+    push @scores, max(@{$allscores{$pos}});
+  }
+
+# FLAWED: off by one
+#  my @positionscores = (); # Aggregates scores at each position - contains between 0 and 3 elements at any given time
+#  for my $i (0..$#tabixoutputlines) { # 
+#    if (($i+1) % 3 == 0) { # Every 3 lines represents a position. So, at lines 2, 5, 8,... add the max score at the given position to @scores and reset @positionscores
+#      print STDERR "@positionscores" if $start==10483769;
+#      push @scores, max(@positionscores);
+#      @positionscores = ();
+#    }
+#    push @positionscores, (split(/\s+/,$tabixoutputlines[$i]))[5]; # Get score from ith line of tabix output, put in @positionscores
+#  }
+
   @scores = pairwise {$a * $b}	@scores, @probdist if $weight;
   if ($ops eq 'MAX') {
     $res = max(@scores)
