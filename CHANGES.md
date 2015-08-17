@@ -1,8 +1,8 @@
-## 0.3 (08/14/15)
+## 0.3 (08/17/15)
  * Performance improvement (fixed high memory usage bug)
- * Compatibility with vcfanno v0.0.7
+ * Use vcfanno v0.0.7 and CADD v1.3
  * Fixed off-by-one error in coordinates
- * Added -g, -e, and -n options to allow use of custom gene/exon annotation files
+ * Added -g, -e, -m, and -n options to allow use of custom gene/exon annotation files
  * Processes BND variants without mates, provided CIEND field is present
  * Updates VCF header with scores added to INFO field
  * Intermediate files are tagged with timestamp to prevent collisions from parallel instances

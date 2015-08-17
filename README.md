@@ -9,9 +9,10 @@ usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] 
     -d	      Debug (verbose) mode, keeps intermediate and supporting files
     -s	      Create/download supporting files and quit
     -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
-    -g	      Used to point to gene BED file (refGene.genes.b37.bed)
-    -e	      Used to point to exon BED file (refGene.exons.b37.bed)
-    -n	      Column number for annotation in exon BED file to be added to VCF (5)
+    -g	      Points to gene BED file (refGene.genes.b37.bed)
+    -m	      Column number for annotation in gene BED file to be added to VCF (4)
+    -e	      Points to exon BED file (refGene.exons.b37.bed)
+    -n	      Column number for annotation in exon BED file to be added to VCF (4 if using -e, 5 otherwise)
     -w	      Weight CADD scores in breakends by probability distribution (requires PRPOS/PREND in INFO field)
     -o	      Specify operation to perform on CADD scores (must be sum, max, or both - defaults to both)
 
@@ -34,7 +35,12 @@ usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] 
 
 * Your favorite hg19/GRCh37-based, tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download them (functionality courtesy of Colby Chiang).
 
-  * If using your own exon file, you must use -n to specify which column contains the desired annotation (typically gene symbol or gene name). SVScore outputs a VCF file with the following scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added.
+  * If using your own exon file, you must use -n to specify which column contains the desired annotation (typically gene symbol or gene name).
+
+  * SVScore expects custom gene annotation files to contain gene symbol/gene name in column 4 and strand information in column 5
+  
+# Notes
+SVScore outputs a VCF file with the following scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added.
   * Under -o max or -o both
       1. SVSCOREMAX_LEFT for all variants - max C score within the left breakend
       2. SVSCOREMAX_RIGHT for all variants - max C score within the right breakend
@@ -48,7 +54,6 @@ usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] 
       4. SVSCORESUM_LTRUNC for BND/INV variants whose left breakend seems to truncate a gene - sum of C scores within gene downstream of beginning of left breakend 
       5. SVSCORESUM_RTRUNC for BND/INV variants whose right breakend seems to truncate a gene - sum of C scores within gene downstream of beginning of right breakend 
 
-# Notes
 SVScore creates a file of introns (unless a file called introns.bed already exists in the current directory) by subtracting the exon file from the gene file using bedtools. So, if there is already file called introns.bed in the current directory, rename it or SVScore will not work correctly.
 
 Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompressed input files should not end with this suffix.

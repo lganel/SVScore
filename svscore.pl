@@ -14,7 +14,7 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt 
 $main::VERSION = '0.3';
 
 my %options = ();
-getopts('dswc:g:e:n:o:',\%options);
+getopts('dswc:g:e:m:n:o:',\%options);
 
 my $debug = defined $options{'d'};
 my $support = defined $options{'s'};
@@ -24,10 +24,11 @@ my $weight = defined $options{'w'};
 
 my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed');
+my $geneanncolumn = (defined $options{'m'} && defined $options{'g'} ? $options{'m'} : 4);
+warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation column (4)" if defined $options{'m'} && !defined $options{'g'};
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
-my $exonanncolumn = (defined $options{'n'} && defined $exonfile ? $options{'n'} : 5);
-warn "Exon annotation column provided without nonstandard exon annotation file - defaulting to standard exon annotation file" if defined $options{'n'} && !defined $options{'e'};
-die "Nonstandard exon annotation file without column number - rerun with -n option" if !defined $options{'n'} && defined $options{'e'};
+my $exonanncolumn = (defined $options{'n'} && defined $options{'e'} ? $options{'n'} : (defined $options{'e'} ? 4 : 5));
+warn "Exon annotation column provided without nonstandard exon annotation file - defaulting to standard exon annotation column (5)" if defined $options{'n'} && !defined $options{'e'};
 $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
 my $ops = (defined $options{'o'} ? $options{'o'} : 'BOTH');
 die "Unrecognized operation specified: $ops" unless ($ops eq 'SUM' || $ops eq 'MAX' || $ops eq 'BOTH');
@@ -46,7 +47,7 @@ if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon fil
 
 if ($genefile eq 'refGene.genes.b37.bed' && !-s $genefile) { # Generate gene file if necessary
   print STDERR "Generating gene file\n" if $debug;
-  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$4,\$13}' OFS=\"\\t\" | sort -k 1,1 -k 2,2n | uniq > refGene.genes.b37.bed");
+  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$13,\$4}' OFS=\"\\t\" | sort -k 1,1 -k 2,2n | uniq > refGene.genes.b37.bed");
 } elsif ($genefile ne 'refGene.genes.b37.bed' && !-s $genefile) {
   die "$genefile not found or empty!";
 }
@@ -56,13 +57,13 @@ unless (-s 'introns.bed') { # Generate intron file if necessary - add column wit
   system("bedtools subtract -a $genefile -b $exonfile | sort -u -k 1,1 -k 2,2n | awk '{print \$0 \"\t\" NR}' > introns.bed");
 }
 
-my $intronnumcolumn = `head -n 1 introns.bed | awk '{print NF}'`;
+my $intronnumcolumn = `head -n 1 introns.bed | awk '{print NF}'`; # Figure out which column has the intron number
 chomp $intronnumcolumn;
 
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
 open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[5]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]";
+print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[4]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$exonfile\"\nnames=[\"ExonGeneNames\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]";
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
@@ -77,7 +78,11 @@ if (defined $ARGV[0]) {
   $headerfile = "${prefix}header$time";
   my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1 -k2,2n\" }' | vcfanno -ends conf.toml - > $annfile; grep '^#' $annfile > $headerfile"; # Sort, annotate, grab header
   print STDERR "Preprocessing command 1: $preprocess\n" if $debug;
-  die "Preprocessing failed: $!" if system($preprocess);
+  if (system($preprocess)) {
+    unlink $annfile unless $debug;
+    unlink $headerfile unless $debug;
+    die "Preprocessing failed: $!"
+  }
 
   # Update header
   open(HEADER, "$headerfile") || die "Could not open $headerfile: $!";
@@ -114,14 +119,19 @@ if (defined $ARGV[0]) {
     print HEADER;
   }
   if ($weight && !(grep {/^##INFO=<ID=PRPOS,/} @newheader)) {
-    $weight = 0;
+    $weight = "";
     warn "PRPOS not found in header - SVScore will not weight CADD scores\n";
   }
 
   # Create and execute second preprocessing command
   my $preprocess2 = "grep -v '^#' $annfile | sort -k 3,3 | cat $headerfile - > $preprocessedfile; rm -f $headerfile"; # Sort by ID, add new header, clean up
   print STDERR "Preprocessing command 2: $preprocess2\n" if $debug;
-  die "Preprocessing2 failed: $!" if system("$preprocess2");
+  if (system($preprocess2)) {
+    unlink $headerfile unless $debug;
+    unlink $annfile unless $debug;
+    unlink $preprocessedfile unless $debug;
+    die "Preprocessing2 failed: $!";
+  }
   unlink "$annfile" || warn "Could not delete $annfile: $!" unless $debug;
 }
 
@@ -134,7 +144,7 @@ print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
 open(GENES, "< $genefile") || die "Could not open $genefile: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
-  my ($genechrom, $genestart, $genestop, $genestrand, $genesymbol) = split(/\s+/,$geneline);
+  my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = split(/\s+/,$geneline);
   if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume strand stays constant
     $genes{$genesymbol}->{$genechrom}->[0] = min($genes{$genesymbol}->{$genechrom}->[0], $genestart);
     $genes{$genesymbol}->{$genechrom}->[1] = max($genes{$genesymbol}->{$genechrom}->[1], $genestop);
@@ -232,7 +242,7 @@ foreach my $i (0..$#inputlines) {
     if ($rightstop - $leftstart > 1000000) {
       $spanscore = ($ops eq "BOTH" ? [100, 100] : 100);
     } else {
-      $spanscore = cscoreop($caddfile, 0, $ops, $leftchrom, $leftstart, $rightstop, "");
+      $spanscore = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart, $rightstop, "");
     }
     $leftscore = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft);
     $rightscore = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright);
@@ -253,9 +263,9 @@ foreach my $i (0..$#inputlines) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$leftchrom}}[0..2];	
 	my $cscoreopres;
 	if ($genestrand eq '+') {
-	  $cscoreopres = cscoreop($caddfile, 0, $ops, $leftchrom, max($genestart,$leftstart),$genestop, ""); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+	  $cscoreopres = cscoreop($caddfile, "", $ops, $leftchrom, max($genestart,$leftstart),$genestop, ""); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else {
-	  $cscoreopres = cscoreop($caddfile, 0, $ops, $leftchrom, $genestart,min($genestop,$leftstop), ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
+	  $cscoreopres = cscoreop($caddfile, "", $ops, $leftchrom, $genestart,min($genestop,$leftstop), ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
 	if ($ops eq 'BOTH') {
 	  push @lefttruncationscores,$cscoreopres->[0] unless $cscoreopres->[0] == -1;
@@ -269,9 +279,9 @@ foreach my $i (0..$#inputlines) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$rightchrom}}[0..2];	
 	my $cscoreopres;
 	if ($genestrand eq '+') {
-	  $cscoreopres = cscoreop($caddfile, 0, $ops, $rightchrom, max($genestart,$rightstart),$genestop, ""); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+	  $cscoreopres = cscoreop($caddfile, "", $ops, $rightchrom, max($genestart,$rightstart),$genestop, ""); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
 	} else {
-	  $cscoreopres = cscoreop($caddfile, 0, $ops, $rightchrom, $genestart,min($genestop,$rightstop), ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
+	  $cscoreopres = cscoreop($caddfile, "", $ops, $rightchrom, $genestart,min($genestop,$rightstop), ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
 	if ($ops eq 'BOTH') {
 	  push @righttruncationscores,$cscoreopres->[0] unless $cscoreopres->[0] == -1;
@@ -293,8 +303,8 @@ foreach my $i (0..$#inputlines) {
     $mateinfo .= $addtoinfo if $svtype eq "BND" && !$singletonbnd;
     (@lefttruncationscores,@righttruncationscores,@lefttruncationscoressum,@righttruncationscoressum,$lefttruncationscore,$righttruncationscore,$addtoinfo) = (); # Get rid of old variables
   } elsif ($svtype eq "INS") { # leftscore is base before insertion, rightscore is base after insertion
-    $leftscore = cscoreop($caddfile, 0, $ops, $leftchrom, $leftstart-1, $leftstart-1, "");
-    $rightscore = cscoreop($caddfile, 0, $ops, $rightchrom, $rightstart+1, $rightstart+1, "");
+    $leftscore = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-1, $leftstart-1, "");
+    $rightscore = cscoreop($caddfile, "", $ops, $rightchrom, $rightstart+1, $rightstart+1, "");
     $info .= ($ops eq "BOTH" ? ";SVSCOREMAX_LEFT=$leftscore->[0];SVSCORESUM_LEFT=$leftscore->[1];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_RIGHT=$rightscore->[1]" : ";SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore");
   } else {
     die "Unrecognized SVTYPE $svtype at line ",$i+1," of annotated VCF file\n";
@@ -407,17 +417,18 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
 
 sub main::HELP_MESSAGE() {
   print "usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] [-c caddfile] vcf
-      -d        Debug (verbose) mode, keeps intermediate and supporting files
-      -s        Create/download supporting files and quit
-      -c        Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
-      -g        Used to point to gene BED file (refGene.genes.b37.bed)
-      -e        Used to point to exon BED file (refGene.exons.b37.bed)
-      -n        Column number for annotation in exon BED file to be added to VCF (5)
-      -w        Weight CADD scores in breakends by probability distribution (requires PRPOS/PREND in INFO field)
-      -o        Specify operation to perform on CADD scores (must be sum, max, or both - defaults to both)
+    -d	      Debug (verbose) mode, keeps intermediate and supporting files
+    -s	      Create/download supporting files and quit
+    -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
+    -g	      Points to gene BED file (refGene.genes.b37.bed)
+    -m	      Column number for annotation in gene BED file to be added to VCF (4)
+    -e	      Points to exon BED file (refGene.exons.b37.bed)
+    -n	      Column number for annotation in exon BED file to be added to VCF (4 if using -e, 5 otherwise)
+    -w	      Weight CADD scores in breakends by probability distribution (requires PRPOS/PREND in INFO field)
+    -o	      Specify operation to perform on CADD scores (must be sum, max, or both - defaults to both)
 
-      --help    Display this message
-      --version Display version\n";
+    --help    Display this message
+    --version Display version\n"
 }
 
 sub main::VERSION_MESSAGE() {
