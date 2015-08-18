@@ -23,6 +23,7 @@ my $weight = defined $options{'w'};
 &main::HELP_MESSAGE() && die unless defined $ARGV[0] || $support;
 
 my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
+die "Could not find $caddfile" unless -s $caddfile;
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed');
 my $geneanncolumn = (defined $options{'m'} && defined $options{'g'} ? $options{'m'} : 4);
 warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation column (4)" if defined $options{'m'} && !defined $options{'g'};
