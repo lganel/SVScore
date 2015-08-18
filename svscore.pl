@@ -67,15 +67,16 @@ print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[4]\
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
+mkdir "svscoretmp" unless -d "svscoretmp";
 if (defined $ARGV[0]) {
   print STDERR "Preparing preprocessing command\n" if $debug;
   my ($prefix) = ($ARGV[0] =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
 
   # Tag intermediate files with timestamp to avoid collisions
   my $time = gettimeofday();
-  $preprocessedfile = "$prefix.preprocess$time.vcf";
-  $annfile = "$prefix.ann$time.vcf";
-  $headerfile = "${prefix}header$time";
+  $preprocessedfile = "svscoretmp/$prefix.preprocess$time.vcf";
+  $annfile = "svscoretmp/$prefix.ann$time.vcf";
+  $headerfile = "svscoretmp/${prefix}header$time";
   my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1 -k2,2n\" }' | vcfanno -ends conf.toml - > $annfile; grep '^#' $annfile > $headerfile"; # Sort, annotate, grab header
   print STDERR "Preprocessing command 1: $preprocess\n" if $debug;
   if (system($preprocess)) {
