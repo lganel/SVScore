@@ -359,7 +359,10 @@ foreach my $i (sort {$chroms[$a] cmp $chroms[$b] || $starts[$a] <=> $starts[$b]}
   print "$outputlines[$i]\n";
 }
 
-unlink "$preprocessedfile" unless $debug;
+unless ($debug) {
+  unlink "$preprocessedfile" unless $debug;
+  rmdir "svscoretmp" unless $debug;
+}
 
 sub cscoreop { # Apply operation specified in $ops to C scores within a given region using CADD data
   my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist) = @_;
