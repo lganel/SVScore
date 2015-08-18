@@ -417,7 +417,7 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
 }
 
 sub main::HELP_MESSAGE() {
-  print "usage: ./svscore.pl [-ds] [-g genefile] [-e exonfile] [-n exonannotationcolumn] [-c caddfile] vcf
+  print "usage: ./svscore.pl [-ds] [-g genefile] [-m geneannotationcolumn] [-e exonfile] [-n exonannotationcolumn] [-c caddfile] vcf
     -d	      Debug (verbose) mode, keeps intermediate and supporting files
     -s	      Create/download supporting files and quit
     -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
