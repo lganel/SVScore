@@ -369,6 +369,7 @@ sub cscoreop { # Apply operation specified in $ops to C scores within a given re
   my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist) = @_;
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
+  return ($ops eq 'BOTH' ? [-1, -1] : -1) if ($stop-$start>1000000); # Short circuit if region is too big - this is usually caused by faulty annotations
   my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
   my @tabixoutputlines = split(/\n/,$tabixoutput);
   return ($ops eq 'BOTH' ? [-1, -1] : -1) unless (@tabixoutputlines == 3 * ($stop-$start+1)); # Short circuit if variant hits region with no C scores
@@ -381,17 +382,6 @@ sub cscoreop { # Apply operation specified in $ops to C scores within a given re
   foreach my $pos (sort {$a <=> $b}  keys %allscores) { # Populate @scores
     push @scores, max(@{$allscores{$pos}});
   }
-
-# FLAWED: off by one
-#  my @positionscores = (); # Aggregates scores at each position - contains between 0 and 3 elements at any given time
-#  for my $i (0..$#tabixoutputlines) { # 
-#    if (($i+1) % 3 == 0) { # Every 3 lines represents a position. So, at lines 2, 5, 8,... add the max score at the given position to @scores and reset @positionscores
-#      print STDERR "@positionscores" if $start==10483769;
-#      push @scores, max(@positionscores);
-#      @positionscores = ();
-#    }
-#    push @positionscores, (split(/\s+/,$tabixoutputlines[$i]))[5]; # Get score from ith line of tabix output, put in @positionscores
-#  }
 
   @scores = pairwise {$a * $b}	@scores, @probdist if $weight;
   if ($ops eq 'MAX') {
