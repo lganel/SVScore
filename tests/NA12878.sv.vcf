@@ -1,0 +1,60 @@
+##fileformat=VCFv4.2
+##fileDate=20150423
+##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">
+##INFO=<ID=SVLEN,Number=.,Type=Integer,Description="Difference in length between REF and ALT alleles">
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record">
+##INFO=<ID=STRANDS,Number=.,Type=String,Description="Strand orientation of the adjacency in BEDPE format (DEL:+-, DUP:-+, INV:++/--)">
+##INFO=<ID=IMPRECISE,Number=0,Type=Flag,Description="Imprecise structural variation">
+##INFO=<ID=CIPOS,Number=2,Type=Integer,Description="Confidence interval around POS for imprecise variants">
+##INFO=<ID=CIEND,Number=2,Type=Integer,Description="Confidence interval around END for imprecise variants">
+##INFO=<ID=CIPOS95,Number=2,Type=Integer,Description="Confidence interval (95%) around POS for imprecise variants">
+##INFO=<ID=CIEND95,Number=2,Type=Integer,Description="Confidence interval (95%) around END for imprecise variants">
+##INFO=<ID=MATEID,Number=.,Type=String,Description="ID of mate breakends">
+##INFO=<ID=EVENT,Number=1,Type=String,Description="ID of event associated to breakend">
+##INFO=<ID=SECONDARY,Number=0,Type=Flag,Description="Secondary breakend in a multi-line variants">
+##INFO=<ID=SU,Number=.,Type=Integer,Description="Number of pieces of evidence supporting the variant across all samples">
+##INFO=<ID=PE,Number=.,Type=Integer,Description="Number of paired-end reads supporting the variant across all samples">
+##INFO=<ID=SR,Number=.,Type=Integer,Description="Number of split reads supporting the variant across all samples">
+##INFO=<ID=EV,Number=.,Type=String,Description="Type of LUMPY evidence contributing to the variant call">
+##INFO=<ID=PRPOS,Number=.,Type=String,Description="LUMPY probability curve of the POS breakend">
+##INFO=<ID=PREND,Number=.,Type=String,Description="LUMPY probability curve of the END breakend">
+##ALT=<ID=DEL,Description="Deletion">
+##ALT=<ID=DUP,Description="Duplication">
+##ALT=<ID=INV,Description="Inversion">
+##ALT=<ID=DUP:TANDEM,Description="Tandem duplication">
+##ALT=<ID=INS,Description="Insertion of novel sequence">
+##ALT=<ID=CNV,Description="Copy number variable region">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=SU,Number=1,Type=Integer,Description="Number of pieces of evidence supporting the variant">
+##FORMAT=<ID=PE,Number=1,Type=Integer,Description="Number of paired-end reads supporting the variant">
+##FORMAT=<ID=SR,Number=1,Type=Integer,Description="Number of split reads supporting the variant">
+##FORMAT=<ID=GQ,Number=1,Type=Float,Description="Genotype quality">
+##FORMAT=<ID=SQ,Number=1,Type=Float,Description="Phred-scaled probability that this site is variant (non-reference in this sample">
+##FORMAT=<ID=GL,Number=G,Type=Float,Description="Genotype Likelihood, log10-scaled likelihoods of the data given the called genotype for each possible genotype generated from the reference and alternate alleles given the sample ploidy">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=RO,Number=1,Type=Integer,Description="Reference allele observation count, with partial observations recorded fractionally">
+##FORMAT=<ID=AO,Number=A,Type=Integer,Description="Alternate allele observations, with partial observations recorded fractionally">
+##FORMAT=<ID=CN,Number=1,Type=Float,Description="Copy number of structural variant segment.">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	NA12878
+1	869465	1	N	<DEL>	1293.82	.	SVTYPE=DEL;SVLEN=-752;END=870217;STRANDS=+-:31;IMPRECISE;CIPOS=-10,157;CIEND=-84,10;CIPOS95=-3,31;CIEND95=-36,3;SU=31;PE=31;SR=0;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	1/1:31:31:0:152.56:1293.82:-131,-18,-1:84:11:72:0.12
+1	1157791	4345_1	N	N[4:76212291[	0.00	.	SVTYPE=BND;STRANDS=+-:5;IMPRECISE;CIPOS=-8,8;CIEND=-9,6;CIPOS95=-1,0;CIEND95=0,0;MATEID=4345_2;EVENT=4345;SU=5;PE=1;SR=4;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO	0/0:5:1:4:156.54:0.00:-1,-32,-110:171:166:4
+1	1506312	4493_1	N	]15:93835786]N	131.20	.	SVTYPE=BND;STRANDS=-+:10;CIPOS=-5,2;CIEND=-10,10;CIPOS95=0,0;CIEND95=0,0;MATEID=4493_2;EVENT=4493;SU=10;PE=3;SR=7;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO	0/1:10:3:7:131.21:131.20:-19,-6,-41:110:88:21
+1	1588546	2	N	<DUP>	445.40	.	SVTYPE=DUP;SVLEN=65262;END=1653808;STRANDS=-+:5;IMPRECISE;CIPOS=-266,10;CIEND=-10,341;CIPOS95=-173,2;CIEND95=-2,169;SU=5;PE=5;SR=0;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/1:5:5:0:28.22:445.40:-46,-1,-4:116:77:38:2.17
+1	1594979	3	N	<DUP>	398.73	.	SVTYPE=DUP;SVLEN=65886;END=1660865;STRANDS=-+:11;IMPRECISE;CIPOS=-187,10;CIEND=-10,555;CIPOS95=-93,3;CIEND95=-3,92;SU=11;PE=11;SR=0;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/1:11:11:0:73.52:398.73:-41,-1,-9:147:108:38:2.15
+1	1628309	4	N	<DUP>	188.64	.	SVTYPE=DUP;SVLEN=52735;END=1681044;STRANDS=-+:4;IMPRECISE;CIPOS=-295,10;CIEND=-10,460;CIPOS95=-206,2;CIEND95=-1,148;SU=4;PE=4;SR=0;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/1:4:4:0:119.89:188.64:-23,-4,-16:146:120:25:2.20
+1	1925145	4443_1	N	]10:28511163]N	0.00	.	SVTYPE=BND;STRANDS=-+:8;CIPOS=-10,10;CIEND=-10,10;CIPOS95=0,0;CIEND95=0,0;MATEID=4443_2;EVENT=4443;SU=8;PE=0;SR=8;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO	0/0:8:0:8:159.55:0.00:-0,-24,-76:110:110:0
+1	2775807	5	N	<DEL>	507.94	.	SVTYPE=DEL;SVLEN=-44;END=2775851;STRANDS=+-:4;IMPRECISE;CIPOS=-9,8;CIEND=0,7;CIPOS95=0,0;CIEND95=0,1;SU=4;PE=0;SR=4;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/1:4:0:4:74.70:507.94:-52,-2,-9:78:40:38:1.02
+1	2911548	6	N	<DEL>	593.91	.	SVTYPE=DEL;SVLEN=-302;END=2911850;STRANDS=+-:11;CIPOS=-3,2;CIEND=-3,2;CIPOS95=0,0;CIEND95=0,0;SU=11;PE=0;SR=11;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/1:11:0:11:15.08:593.91:-63,-3,-5:72:30:42:0.99
+1	2919034	7	N	<DEL>	780.36	.	SVTYPE=DEL;SVLEN=-332;END=2919366;STRANDS=+-:12;CIPOS=-10,10;CIEND=-10,10;CIPOS95=0,0;CIEND95=0,0;SU=12;PE=0;SR=12;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/1:12:0:12:200:780.36:-80,-2,-39:187:121:66:1.22
+1	2942607	4500_1	N	N]16:27318050]	13.53	.	SVTYPE=BND;STRANDS=++:5;CIPOS=-10,10;CIEND=-10,10;CIPOS95=0,0;CIEND95=0,0;MATEID=4500_2;EVENT=4500;SU=5;PE=0;SR=5;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO	0/1:5:0:5:13.53:13.53:-11,-10,-52:112:97:14
+1	3045712	8	N	<DEL>	638.56	.	SVTYPE=DEL;SVLEN=-238;END=3045950;STRANDS=+-:7;CIPOS=-5,4;CIEND=-2,0;CIPOS95=0,0;CIEND95=0,0;SU=7;PE=0;SR=7;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/1:7:0:7:200:638.56:-67,-3,-53:202:142:60:2.59
+1	3092611	9	N	<DUP>	642.97	.	SVTYPE=DUP;SVLEN=251;END=3092862;STRANDS=-+:8;CIPOS=-10,10;CIEND=-5,4;CIPOS95=0,0;CIEND95=0,0;SU=8;PE=1;SR=7;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/1:8:1:7:78.83:642.97:-66,-1,-9:202:143:59:3.64
+1	3326399	4449_1	N	[10:128190607[N	0.00	.	SVTYPE=BND;STRANDS=--:5;CIPOS=-10,10;CIEND=-10,10;CIPOS95=0,0;CIEND95=0,0;MATEID=4449_2;EVENT=4449;SU=5;PE=0;SR=5;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO	0/0:5:0:5:154.77:0.00:-1,-38,-120:172:172:0
+1	4124445	10	N	<DUP>	1023.96	.	SVTYPE=DUP;SVLEN=539;END=4124984;STRANDS=-+:6;IMPRECISE;CIPOS=-10,10;CIEND=-8,10;CIPOS95=-1,1;CIEND95=-1,1;SU=6;PE=4;SR=2;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	1/1:6:4:2:80.01:1023.96:-104,-10,-2:121:51:70:2.70
+1	4125539	11	N	<DEL>	94.16	.	SVTYPE=DEL;SVLEN=-1253;END=4126792;STRANDS=+-:5;IMPRECISE;CIPOS=-7,307;CIEND=-124,10;CIPOS95=-2,172;CIEND95=-49,2;SU=5;PE=5;SR=0;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/1:5:5:0:82.35:94.16:-11,-1,-10:33:23:9:0.49
+1	4164632	4408_1	N	]7:43362654]N	0.00	.	SVTYPE=BND;STRANDS=-+:5;IMPRECISE;CIPOS=-9,6;CIEND=-8,8;CIPOS95=0,0;CIEND95=-1,0;MATEID=4408_2;EVENT=4408;SU=5;PE=1;SR=4;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO	0/0:5:1:4:156.54:0.00:-1,-42,-138:209:205:3
+1	5172512	4350_1	N	[4:151579665[N	0.00	.	SVTYPE=BND;STRANDS=--:5;IMPRECISE;CIPOS=-232,10;CIEND=-316,10;CIPOS95=-160,2;CIEND95=-166,1;MATEID=4350_2;EVENT=4350;SU=5;PE=5;SR=0;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO	0/0:5:5:0:47.20:0.00:-6,-11,-50:98:88:9
+1	5447229	12	N	<DUP>	2298.17	.	SVTYPE=DUP;SVLEN=210;END=5447439;STRANDS=-+:30;CIPOS=-3,10;CIEND=-8,7;CIPOS95=0,0;CIEND95=0,0;SU=30;PE=1;SR=29;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	1/1:30:1:29:200:2298.17:-233,-21,-3:270:114:156:6.63
+1	5876603	13	N	<DEL>	0.00	.	SVTYPE=DEL;SVLEN=-917;END=5877520;STRANDS=+-:5;CIPOS=-10,10;CIEND=-10,10;CIPOS95=0,0;CIEND95=0,0;SU=5;PE=0;SR=5;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/0:5:0:5:63.44:0.00:-3,-10,-40:72:66:5:2.38
+1	5877530	14	N	<DEL>	631.24	.	SVTYPE=DEL;SVLEN=-52;END=5877582;STRANDS=+-:7;CIPOS=-6,4;CIEND=0,0;CIPOS95=0,0;CIEND95=0,0;SU=7;PE=0;SR=7;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO:CN	0/1:7:0:7:150.00:631.24:-66,-3,-51:198:138:59:3.29
+1	5889825	4341_1	N	[4:5672208[N	0.00	.	SVTYPE=BND;STRANDS=--:5;CIPOS=-10,10;CIEND=-10,10;CIPOS95=0,0;CIEND95=0,0;MATEID=4341_2;EVENT=4341;SU=5;PE=0;SR=5;	GT:SU:PE:SR:GQ:SQ:GL:DP:RO:AO	0/0:5:0:5:200:0.00:-1,-32,-102:148:147:0
