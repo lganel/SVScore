@@ -53,6 +53,12 @@ SVScore outputs a VCF file with the following scores added to the INFO field of 
       3. SVSCORESUM_SPAN for DEL/DUP - sum of C scores within the span
       4. SVSCORESUM_LTRUNC for BND/INV variants whose left breakend seems to truncate a gene - sum of C scores within gene downstream of beginning of left breakend 
       5. SVSCORESUM_RTRUNC for BND/INV variants whose right breakend seems to truncate a gene - sum of C scores within gene downstream of beginning of right breakend 
+  * Under -o top[number] or -o all
+      1. SVSCORETOP[number]_LEFT for all variants - sum of top [number] C scores within the left breakend
+      2. SVSCORETOP[number]_RIGHT for all variants - sum of top [number] C scores within the right breakend
+      3. SVSCORETOP[number]_SPAN for DEL/DUP - sum of top [number] C scores within the span
+      4. SVSCORETOP[number]_LTRUNC for BND/INV variants whose left breakend seems to truncate a gene - sum of top [number] C scores within gene downstream of beginning of left breakend 
+      5. SVSCORETOP[number]_RTRUNC for BND/INV variants whose right breakend seems to truncate a gene - sum of top [number] C scores within gene downstream of beginning of right breakend 
 
 SVScore creates a file of introns (unless a file called introns.bed already exists in the current directory) by subtracting the exon file from the gene file using bedtools. So, if there is already file called introns.bed in the current directory, rename it or SVScore will not work correctly.
 
