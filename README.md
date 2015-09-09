@@ -37,7 +37,7 @@ usage: ./svscore.pl [-ds] [-g genefile] [-m geneannotationcolumn] [-e exonfile] 
 
   * If using your own exon file, you must use -n to specify which column contains the desired annotation (typically gene symbol or gene name).
 
-  * SVScore expects custom gene annotation files to contain gene symbol/gene name in column 4 and strand information in column 5
+  * SVScore expects custom gene annotation files to contain gene symbol/gene name in column 4 (though this can be changed with -m) and strand information in column 5
   
 # Notes
 SVScore outputs a VCF file with the following scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added.
