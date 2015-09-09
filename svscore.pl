@@ -257,7 +257,7 @@ foreach my $i (0..$#inputlines) {
     }
     $leftscore = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft);
     $rightscore = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright);
-    $info .= ($ops eq "ALL" ? ";SVSCOREMAX_SPAN=$spanscore->[0];SVSCOREMAX_LEFT=$leftscore->[0];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_SPAN=$spanscore->[1];SVSCORESUM_LEFT=$leftscore->[1];SVSCORESUM_RIGHT=$rightscore->[1];SVSCORESUM_TOP${topn}=$spanscore->[2];SVSCORETOP${topn}_LEFT=$leftscore->[2];SVSCORETOP${topn}_RIGHT=$rightscore->[2]" : ";SVSCORE${ops}_SPAN=$spanscore;SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore");
+    $info .= ($ops eq "ALL" ? ";SVSCOREMAX_SPAN=$spanscore->[0];SVSCOREMAX_LEFT=$leftscore->[0];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_SPAN=$spanscore->[1];SVSCORESUM_LEFT=$leftscore->[1];SVSCORESUM_RIGHT=$rightscore->[1];SVSCORETOP${topn}_SPAN=$spanscore->[2];SVSCORETOP${topn}_LEFT=$leftscore->[2];SVSCORETOP${topn}_RIGHT=$rightscore->[2]" : ";SVSCORE${ops}_SPAN=$spanscore;SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore");
     undef $spanscore;
   } elsif ($svtype eq "INV" || $svtype eq "BND") {
     $leftscore = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft);
