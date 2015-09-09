@@ -31,8 +31,9 @@ my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed')
 my $exonanncolumn = (defined $options{'n'} && defined $options{'e'} ? $options{'n'} : (defined $options{'e'} ? 4 : 5));
 warn "Exon annotation column provided without nonstandard exon annotation file - defaulting to standard exon annotation column (5)" if defined $options{'n'} && !defined $options{'e'};
 $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
-my $ops = (defined $options{'o'} ? $options{'o'} : 'BOTH');
-die "Unrecognized operation specified: $ops" unless ($ops eq 'SUM' || $ops eq 'MAX' || $ops eq 'BOTH');
+my $ops = (defined $options{'o'} ? $options{'o'} : 'ALL');
+my $topn = ($ops =~ /^TOP(\d+)$/);
+die "Unrecognized operation specified: $ops" unless ($ops eq 'SUM' || $ops eq 'MAX' || $ops=~/^TOP\d+$/ || $ops eq 'ALL');
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
 my ($annfile, $headerfile, $preprocessedfile);
 
@@ -101,19 +102,26 @@ if (defined $ARGV[0]) {
   }
   unshift @oldheader, $headerline; # Return first format line to top of stack
 
-  if ($ops eq 'MAX' || $ops eq 'BOTH') {
+  if ($ops eq 'MAX' || $ops eq 'ALL') {
     push @newheader, "##INFO=<ID=SVSCOREMAX_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCOREMAX_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCOREMAX_SPAN,Number=1,Type=Float,Description=\"Maximum C score in outer span of structural variant, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCOREMAX_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of gene, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCOREMAX_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of gene, weighted by probability distribution\">\n";
   }
-  if ($ops eq 'SUM' || $ops eq 'BOTH') {
+  if ($ops eq 'SUM' || $ops eq 'ALL') {
     push @newheader, "##INFO=<ID=SVSCORESUM_LEFT,Number=1,Type=Float,Description=\"Sum of C scores in left breakend of structural variant, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCORESUM_RIGHT,Number=1,Type=Float,Description=\"Sum of C scores in right breakend of structural variant, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCORESUM_SPAN,Number=1,Type=Float,Description=\"Sum of C scores in outer span of structural variant, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of gene, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of gene, weighted by probability distribution\">\n";
+  }
+  if ($topn || $ops eq 'ALL') {
+    push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LEFT,Number=1,Type=Float,Description=\"Sum of C scores in left breakend of structural variant, weighted by probability distribution\">\n";
+    push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RIGHT,Number=1,Type=Float,Description=\"Sum of C scores in right breakend of structural variant, weighted by probability distribution\">\n";
+    push @newheader, "##INFO=<ID=SVSCORETOP${topn}_SPAN,Number=1,Type=Float,Description=\"Sum of C scores in outer span of structural variant, weighted by probability distribution\">\n";
+    push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of gene, weighted by probability distribution\">\n";
+    push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of gene, weighted by probability distribution\">\n";
   }
   push @newheader, @oldheader;
   open(HEADER, "> $headerfile") || die "Could not open $headerfile: $!";
@@ -242,18 +250,18 @@ foreach my $i (0..$#inputlines) {
   if ($svtype eq "DEL" || $svtype eq "DUP") {
     my $spanscore;
     if ($rightstop - $leftstart > 1000000) {
-      $spanscore = ($ops eq "BOTH" ? [100, 100] : 100);
+      $spanscore = ($ops eq "ALL" ? [100, 100, 100] : 100);
     } else {
       $spanscore = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart, $rightstop, "");
     }
     $leftscore = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft);
     $rightscore = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright);
-    $info .= ($ops eq "BOTH" ? ";SVSCOREMAX_SPAN=$spanscore->[0];SVSCOREMAX_LEFT=$leftscore->[0];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_SPAN=$spanscore->[1];SVSCORESUM_LEFT=$leftscore->[1];SVSCORESUM_RIGHT=$rightscore->[1]" : ";SVSCORE${ops}_SPAN=$spanscore;SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore");
+    $info .= ($ops eq "ALL" ? ";SVSCOREMAX_SPAN=$spanscore->[0];SVSCOREMAX_LEFT=$leftscore->[0];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_SPAN=$spanscore->[1];SVSCORESUM_LEFT=$leftscore->[1];SVSCORESUM_RIGHT=$rightscore->[1];SVSCORESUM_TOP${topn}=$spanscore->[2];SVSCORETOP${topn}_LEFT=$leftscore->[2];SVSCORETOP${topn}_RIGHT=$rightscore->[2]" : ";SVSCORE${ops}_SPAN=$spanscore;SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore");
     undef $spanscore;
   } elsif ($svtype eq "INV" || $svtype eq "BND") {
     $leftscore = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft);
     $rightscore = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright);
-    my ($sameintrons,@lefttruncationscores,@lefttruncationscoressum,@righttruncationscores,@righttruncationscoressum,$lefttruncationscore,$righttruncationscore,%leftintrons,@rightintrons) = ();
+    my ($sameintrons,@lefttruncationscores,@lefttruncationscoressum,@lefttruncationscorestop,@righttruncationscores,@righttruncationscoressum,@righttruncationscorestop,$lefttruncationscore,$righttruncationscore,%leftintrons,@rightintrons) = ();
     unless ($singletonbnd) {
       %leftintrons = map {$_ => 1} (split(/\|/,$leftintrons));
       @rightintrons = split(/\|/,$rightintrons);
@@ -269,14 +277,15 @@ foreach my $i (0..$#inputlines) {
 	} else {
 	  $cscoreopres = cscoreop($caddfile, "", $ops, $leftchrom, $genestart,min($genestop,$leftstop), ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
-	if ($ops eq 'BOTH') {
+	if ($ops eq 'ALL') {
 	  push @lefttruncationscores,$cscoreopres->[0] unless $cscoreopres->[0] == -1;
 	  push @lefttruncationscoressum,$cscoreopres->[1] unless $cscoreopres->[1] == -1;
+	  push @lefttruncationscorestop,$cscoreopres->[1] unless $cscoreopres->[2] == -1;
 	} else {
 	  push @lefttruncationscores,$cscoreopres unless $cscoreopres == -1;
 	}
       }
-      $lefttruncationscore = ($ops eq 'BOTH' ? [max(@lefttruncationscores), max(@lefttruncationscoressum)] : max(@lefttruncationscores)) if @lefttruncationscores;
+      $lefttruncationscore = ($ops eq 'ALL' ? [max(@lefttruncationscores), max(@lefttruncationscoressum), max(@lefttruncationscorestop)] : max(@lefttruncationscores)) if @lefttruncationscores;
       foreach my $gene (split(/\|/,$rightgenenames)) {
 	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$rightchrom}}[0..2];	
 	my $cscoreopres;
@@ -285,19 +294,20 @@ foreach my $i (0..$#inputlines) {
 	} else {
 	  $cscoreopres = cscoreop($caddfile, "", $ops, $rightchrom, $genestart,min($genestop,$rightstop), ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
 	}
-	if ($ops eq 'BOTH') {
+	if ($ops eq 'ALL') {
 	  push @righttruncationscores,$cscoreopres->[0] unless $cscoreopres->[0] == -1;
 	  push @righttruncationscoressum,$cscoreopres->[1] unless $cscoreopres->[1] == -1;
+	  push @righttruncationscorestop,$cscoreopres->[1] unless $cscoreopres->[2] == -1;
 	} else {
 	  push @righttruncationscores,$cscoreopres unless $cscoreopres == -1;
 	}
       }
-      $righttruncationscore = ($ops eq 'BOTH' ? [max(@righttruncationscores), max(@righttruncationscoressum)] : max(@righttruncationscores)) if @righttruncationscores;
+      $righttruncationscore = ($ops eq 'ALL' ? [max(@righttruncationscores), max(@righttruncationscoressum), max(@righttruncationscorestop)] : max(@righttruncationscores)) if @righttruncationscores;
     }
     ($sameintrons, %leftintrons,@rightintrons) = (); # Get rid of old variables
     my $addtoinfo;
-    if ($ops eq "BOTH") {
-      $addtoinfo = ";SVSCOREMAX_LEFT=$leftscore->[0];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_LEFT=$leftscore->[1];SVSCORESUM_RIGHT=$rightscore->[1]" . (defined $lefttruncationscore ? ";SVSCOREMAX_LTRUNC=$lefttruncationscore->[0];SVSCORESUM_LTRUNC=$lefttruncationscore->[1]" : "") . (defined $righttruncationscore ? ";SVSCOREMAX_RTRUNC=$righttruncationscore->[0];SVSCORESUM_RTRUNC=$righttruncationscore->[1]" : "");
+    if ($ops eq "ALL") {
+      $addtoinfo = ";SVSCOREMAX_LEFT=$leftscore->[0];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_LEFT=$leftscore->[1];SVSCORESUM_RIGHT=$rightscore->[1];SVSCORETOP${topn}_LEFT=$leftscore->[2];SVSCORETOP${topn}_RIGHT=$rightscore->[2]" . (defined $lefttruncationscore ? ";SVSCOREMAX_LTRUNC=$lefttruncationscore->[0];SVSCORESUM_LTRUNC=$lefttruncationscore->[1];SVSCORETOP${topn}_LTRUNC=$lefttruncationscore->[2]" : "") . (defined $righttruncationscore ? ";SVSCOREMAX_RTRUNC=$righttruncationscore->[0];SVSCORESUM_RTRUNC=$righttruncationscore->[1];SVSCORETOP${topn}_RTRUNC=$righttruncationscore->[2]" : "");
     } else {
       $addtoinfo = ";SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore" . (defined $lefttruncationscore ? ";SVSCORE${ops}_LTRUNC=$lefttruncationscore" : "") . (defined $righttruncationscore ? ";SVSCORE${ops}_RTRUNC=$righttruncationscore" : "");
     }
@@ -307,7 +317,7 @@ foreach my $i (0..$#inputlines) {
   } elsif ($svtype eq "INS") { # leftscore is base before insertion, rightscore is base after insertion
     $leftscore = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-1, $leftstart-1, "");
     $rightscore = cscoreop($caddfile, "", $ops, $rightchrom, $rightstart+1, $rightstart+1, "");
-    $info .= ($ops eq "BOTH" ? ";SVSCOREMAX_LEFT=$leftscore->[0];SVSCORESUM_LEFT=$leftscore->[1];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_RIGHT=$rightscore->[1]" : ";SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore");
+    $info .= ($ops eq "ALL" ? ";SVSCOREMAX_LEFT=$leftscore->[0];SVSCORESUM_LEFT=$leftscore->[1];SVSCORETOP${topn}=$leftscore->[2];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_RIGHT=$rightscore->[1];SVSCORETOP${topn}=$rightscore->[2]" : ";SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore");
   } else {
     die "Unrecognized SVTYPE $svtype at line ",$i+1," of annotated VCF file\n";
   }
@@ -367,12 +377,13 @@ unless ($debug) {
 
 sub cscoreop { # Apply operation specified in $ops to C scores within a given region using CADD data
   my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist) = @_;
+  my ($topn) = ($ops =~ /^TOP(\d+)$/);
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
-  return ($ops eq 'BOTH' ? [-1, -1] : -1) if ($stop-$start>1000000); # Short circuit if region is too big - this is usually caused by faulty annotations
+  return ($ops eq 'ALL' ? [-1, -1, -1] : -1) if ($stop-$start>1000000); # Short circuit if region is too big - this is usually caused by faulty annotations
   my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
   my @tabixoutputlines = split(/\n/,$tabixoutput);
-  return ($ops eq 'BOTH' ? [-1, -1] : -1) unless (@tabixoutputlines == 3 * ($stop-$start+1)); # Short circuit if variant hits region with no C scores
+  return ($ops eq 'ALL' ? [-1, -1, -1] : -1) unless (@tabixoutputlines == 3 * ($stop-$start+1)); # Short circuit if variant hits region with no C scores
   
   my %allscores = (); # Hash from position to list of scores
   foreach my $line (@tabixoutputlines) { # Populate hash
@@ -388,10 +399,13 @@ sub cscoreop { # Apply operation specified in $ops to C scores within a given re
     $res = max(@scores)
   } elsif ($ops eq 'SUM') {
     $res = sum(@scores)
+  } elsif ($topn) {
+    my @topn = (sort {$b <=> $a} @scores)[0..$topn];
+    $res = sum(@topn);
   } else {
     $res = [max(@scores), sum(@scores)]
   }
-  ($filename,$chrom,$start,$stop,$ops,$probdist,@probdist,@scores,$tabixoutput,@tabixoutputlines) = (); # Get rid of old variables
+  ($filename,$chrom,$start,$stop,$ops,$probdist,@probdist,@scores,$tabixoutput,@tabixoutputlines,@topn,$topn) = (); # Get rid of old variables
   return $res;
 }
 
