@@ -1,8 +1,6 @@
 # SVScore
 Prioritize structural variants based on annotations and C scores
 
-Still under active development
-
 # Usage
 ```
 usage: ./svscore.pl [-ds] [-g genefile] [-m geneannotationcolumn] [-e exonfile] [-n exonannotationcolumn] [-c caddfile] vcf
@@ -14,11 +12,13 @@ usage: ./svscore.pl [-ds] [-g genefile] [-m geneannotationcolumn] [-e exonfile] 
     -e	      Points to exon BED file (refGene.exons.b37.bed)
     -n	      Column number for annotation in exon BED file to be added to VCF (4 if using -e, 5 otherwise)
     -w	      Weight CADD scores in breakends by probability distribution (requires PRPOS/PREND in INFO field)
-    -o	      Specify operation to perform on CADD scores (must be sum, max, or both - defaults to both)
+    -o	      Specify operation to perform on CADD scores (must be sum, max, top[number], or all - defaults to all)
 
     --help    Display this message
     --version Display version
 ```
+
+-o specifies the operation used to calculate SVScores. "sum" and "max" report the sum and maximum of each interval respectively, while "top[number]" reports the sum of the top [number] scores in each interval and "all" reports the maximum score, sum of all scores, and sum of the top 100 scores for each interval. This option is case insensitive. Under -o top[number] or -o all, if the interval is small than [number] positions (100 in the case of all), then the top[number] score is equal to the sum score.
 
 # Dependencies
 * A Linux-like system with a Bash-like shell
@@ -41,13 +41,13 @@ usage: ./svscore.pl [-ds] [-g genefile] [-m geneannotationcolumn] [-e exonfile] 
   
 # Notes
 SVScore outputs a VCF file with the following scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added.
-  * Under -o max or -o both
+  * Under -o max or -o all
       1. SVSCOREMAX_LEFT for all variants - max C score within the left breakend
       2. SVSCOREMAX_RIGHT for all variants - max C score within the right breakend
       3. SVSCOREMAX_SPAN for DEL/DUP - max C score within the span
       4. SVSCOREMAX_LTRUNC for BND/INV variants whose left breakend seems to truncate a gene - max C score within gene downstream of beginning of left breakend 
       5. SVSCOREMAX_RTRUNC for BND/INV variants whose right breakend seems to truncate a gene - max C score within gene downstream of beginning of right breakend 
-  * Under -o sum or -o both
+  * Under -o sum or -o all
       1. SVSCORESUM_LEFT for all variants - sum of C scores within the left breakend
       2. SVSCORESUM_RIGHT for all variants - sum of C scores within the right breakend
       3. SVSCORESUM_SPAN for DEL/DUP - sum of C scores within the span

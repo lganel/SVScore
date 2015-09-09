@@ -32,7 +32,8 @@ my $exonanncolumn = (defined $options{'n'} && defined $options{'e'} ? $options{'
 warn "Exon annotation column provided without nonstandard exon annotation file - defaulting to standard exon annotation column (5)" if defined $options{'n'} && !defined $options{'e'};
 $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
 my $ops = (defined $options{'o'} ? $options{'o'} : 'ALL');
-my $topn = ($ops =~ /^TOP(\d+)$/);
+my ($topn) = ($ops =~ /^TOP(\d+)$/);
+$topn = 100 if $ops eq 'ALL';
 die "Unrecognized operation specified: $ops" unless ($ops eq 'SUM' || $ops eq 'MAX' || $ops=~/^TOP\d+$/ || $ops eq 'ALL');
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
 my ($annfile, $headerfile, $preprocessedfile);
@@ -116,7 +117,7 @@ if (defined $ARGV[0]) {
     push @newheader, "##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of gene, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of gene, weighted by probability distribution\">\n";
   }
-  if ($topn || $ops eq 'ALL') {
+  if ($ops =~ /^TOP\d+$/ || $ops eq 'ALL') {
     push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LEFT,Number=1,Type=Float,Description=\"Sum of C scores in left breakend of structural variant, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RIGHT,Number=1,Type=Float,Description=\"Sum of C scores in right breakend of structural variant, weighted by probability distribution\">\n";
     push @newheader, "##INFO=<ID=SVSCORETOP${topn}_SPAN,Number=1,Type=Float,Description=\"Sum of C scores in outer span of structural variant, weighted by probability distribution\">\n";
@@ -378,6 +379,7 @@ unless ($debug) {
 sub cscoreop { # Apply operation specified in $ops to C scores within a given region using CADD data
   my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist) = @_;
   my ($topn) = ($ops =~ /^TOP(\d+)$/);
+  $topn = 100 if $ops eq 'ALL';
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
   return ($ops eq 'ALL' ? [-1, -1, -1] : -1) if ($stop-$start>1000000); # Short circuit if region is too big - this is usually caused by faulty annotations
@@ -399,13 +401,16 @@ sub cscoreop { # Apply operation specified in $ops to C scores within a given re
     $res = max(@scores)
   } elsif ($ops eq 'SUM') {
     $res = sum(@scores)
-  } elsif ($topn) {
-    my @topn = (sort {$b <=> $a} @scores)[0..$topn];
+  } elsif ($ops=~/^TOP/) {
+    $topn = min($topn, scalar @scores);
+    my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
     $res = sum(@topn);
   } else {
-    $res = [max(@scores), sum(@scores)]
+    $topn = min($topn, scalar @scores);
+    my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
+    $res = [max(@scores), sum(@scores), sum(@topn)];
   }
-  ($filename,$chrom,$start,$stop,$ops,$probdist,@probdist,@scores,$tabixoutput,@tabixoutputlines,@topn,$topn) = (); # Get rid of old variables
+  ($filename,$chrom,$start,$stop,$ops,$probdist,@probdist,@scores,$tabixoutput,@tabixoutputlines,$topn) = (); # Get rid of old variables
   return $res;
 }
 
@@ -434,7 +439,7 @@ sub main::HELP_MESSAGE() {
     -e	      Points to exon BED file (refGene.exons.b37.bed)
     -n	      Column number for annotation in exon BED file to be added to VCF (4 if using -e, 5 otherwise)
     -w	      Weight CADD scores in breakends by probability distribution (requires PRPOS/PREND in INFO field)
-    -o	      Specify operation to perform on CADD scores (must be sum, max, or both - defaults to both)
+    -o	      Specify operation to perform on CADD scores (must be sum, max, top[number], or all - defaults to all)
 
     --help    Display this message
     --version Display version\n"
