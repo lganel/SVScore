@@ -248,7 +248,7 @@ foreach my $i (0..$#inputlines) {
   my ($leftscore,$rightscore);
 
   # Calculate maximum C score depending on SV type
-  if ($svtype eq "DEL" || $svtype eq "DUP") {
+  if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV" || $svtype eq "MEI") {
     my $spanscore;
     if ($rightstop - $leftstart > 1000000) {
       $spanscore = ($ops eq "ALL" ? [100, 100, 100] : 100);
