@@ -194,6 +194,7 @@ foreach my $i (0..$#inputlines) {
 
   if ($svtype eq 'BND') {
     my ($mateid) = ($id =~ /^(\d+)_(?:1|2)/);
+    $mateid = $id unless $mateid;
     my ($nextmateid) = ($i == $#inputlines ? ("") : ((split(/\s+/,$inputlines[$i+1]))[2] =~ /^(\d+)_(?:1|2)/)); # $nextmateid is set to the mateid of the next line, unless the current line is the final line in the file. In this case, $nextmateid is set to the empty string because we know it's not the first mate of a consecutive pair
     my $firstmate = ($nextmateid && $mateid == $nextmateid); # First mate of a consecutive pair
     my $secondmate = ($lastbndmateid && $mateid == $lastbndmateid); # Second mate of a consecutive pair
@@ -217,7 +218,11 @@ foreach my $i (0..$#inputlines) {
       } else { # Current line is primary (left), so mate is secondary (right)
 	($rightexongenenames, $rightgenenames, $rightintrons) = ($singletonbnd ? ("","","") : getfields($mateinfo,"ExonGeneNames","Gene","Intron")); # Get mate annotations
 	($ciend, $probright) = getfields($mateinfo, "CIPOS", "PRPOS") unless $singletonbnd; # Overwrite (possibly empty) ciend with mate's CIPOS and get mate's PRPOS if exists
-	($rightchrom,$rightpos) = ($alt =~ /([\w.]+):(\d+)/);
+	($rightchrom,$rightpos) = ($alt =~ /([\w.]+):(\d+)/); # Get right breakend coordinates if standard BND
+	unless ($rightchrom && $rightpos) { # Get right breakend coordinates if reclassified BND
+	  $rightchrom = $leftchrom;
+	  $rightpos = getfields($info, "END");
+	}
       }
       undef $mateline unless $singletonbnd;
     } else { # Must be the first mate of a consecutive pair
