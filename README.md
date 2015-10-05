@@ -69,3 +69,5 @@ For BND variants, primary mate is considered the left breakend and the secondary
 If only one mate line of a BND variant is present in the VCF file, left and right breakend scores are still calculated, as well as one truncation score if applicable (whether it is the left or right truncation score depends on whether the line describes a primary or secondary mate). There must be a CIEND interval in the INFO field for this to happen.
 
 -w is ignored with a warning if PRPOS is not represented in the header
+
+Variants with type DEL, DUP, MEI, or CNV which are over 1 Mb in length are automatically given a score of 100

@@ -1,3 +1,13 @@
+## 0.4 (Under development)
+ * Fixed major bug in automatic download of RefSeq annotations
+ * Implemented -o TOPn option
+ * Added support for CNV and MEI variants (treated as DELs/DUPs)
+ * Temporary files go in svscoretmp directory, which is deleted automatically (except under -d)
+ * Improved performance by returning a score of -1 for regions which are too big (above 1 Mb)
+ * Added unit test
+ * Allow for calculation of scores for variants reclassified to BND without changing the ALT field
+
+
 ## 0.3 (08/17/15)
  * Performance improvement (fixed high memory usage bug)
  * Use vcfanno v0.0.7 and CADD v1.3
