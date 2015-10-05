@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ -z "$1" ]; then
+  echo "Please provide the path to whole_genome_SNVs.tsv.gz as an argument"
+  exit 1;
+fi
+
 grep -v "^#" NA12878.sv.svscore.vcf > NA12878.sv.svscore.noheader.vcf
 
 ../svscore.pl -dc $1 NA12878.sv.vcf | grep -v "^#" > NA12878.sv.svscore.test.noheader.vcf
