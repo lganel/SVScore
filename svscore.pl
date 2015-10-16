@@ -2,7 +2,7 @@
 ## Author: Liron Ganel
 ## Laboratory of Ira Hall, McDonnell Genome Institute
 ## Washington University in St. Louis
-## Version 0.3
+## Version 0.4
 
 use strict;
 use Getopt::Std;
@@ -11,7 +11,7 @@ use List::MoreUtils qw(pairwise);
 use Time::HiRes qw(gettimeofday);
 
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
-$main::VERSION = '0.3';
+$main::VERSION = '0.4';
 
 my %options = ();
 getopts('dswc:g:e:m:n:o:',\%options);
