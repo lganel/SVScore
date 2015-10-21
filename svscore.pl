@@ -9,6 +9,7 @@ use Getopt::Std;
 use List::Util qw(max min sum);
 use List::MoreUtils qw(pairwise);
 use Time::HiRes qw(gettimeofday);
+use Math::Round qw(nearest);
 
 sub main::HELP_MESSAGE(); # Declaration to make perl happy
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
@@ -41,6 +42,10 @@ my $ops = (defined $options{'o'} ? $options{'o'} : 'ALL');
 my $topn = (defined $options{'t'} ? $options{'t'} : 100);
 warn "Unrecognized operation specified: $ops\n" && die main::HELP_MESSAGE() unless ($ops eq "ALL" || defined $possibleoperations{$ops});
 my %operations = ($ops eq 'ALL' ? %possibleoperations : ($ops => 0)); # Hash of indices for each operation within lists in the values of %scores
+if ($ops eq 'ALL' || $ops eq 'TOP') {
+  $operations{"TOP$topn"} = $operations{"TOP"};
+  delete $operations{"TOP"};
+}
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
 my ($headerfile, $preprocessedfile, $bedpeout, $vcfout);
 
@@ -133,7 +138,7 @@ if (defined $ARGV[0]) {
     push @newheader, "##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of truncated gene\">\n";
     push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of truncated gene\">\n";
   }
-  if ($ops =~ /^TOP\d+$/ || $ops eq 'ALL') {
+  if ($ops eq 'TOP' || $ops eq 'ALL') {
     push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LEFT,Number=1,Type=Float,Description=\"Mean of top $topn C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
     push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RIGHT,Number=1,Type=Float,Description=\"Mean of top $topn C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
     push @newheader, "##INFO=<ID=SVSCORETOP${topn}_SPAN,Number=1,Type=Float,Description=\"Mean of top $topn C scores in outer span of structural variant\">\n";
@@ -452,12 +457,12 @@ close OUT;
 system("bedpetovcf -b $bedpeout > $vcfout");
 system("grep \"^#\" $vcfout > $vcfout.header");
 print `grep -v "^#" $vcfout | sort -k1,1n -k2,2n | cat $vcfout.header -`;
-#unlink "$vcfout.header"; ## BRINGBACK
+unlink "$vcfout.header"; ## BRINGBACK
 
 unless ($debug) {
   unlink "$preprocessedfile";
-  unlink "svscoretmp/$prefix$time.out.bedpe";
-  unlink "svscoretmp/$prefix$time.out.vcf";
+  unlink "$vcfout";
+  unlink "$bedpeout";
   rmdir "svscoretmp";
 }
 
@@ -487,13 +492,13 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   } elsif ($ops=~/^TOP/) {
     $topn = min($topn, scalar @scores);
     my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
-    $res = [sum(@topn) / length(@topn)];
+    $res = [nearest(0.001,sum(@topn) / scalar(@topn))];
   } elsif ($ops eq 'MEAN') {
-    $res = [sum(@scores)/length(@scores)];
+    $res = [nearest(0.001,sum(@scores)/scalar(@scores))];
   } else {
     $topn = min($topn, scalar @scores);
     my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
-    $res = [max(@scores), sum(@scores), sum(@topn)/length(@topn), sum(@scores)/length(@scores)];
+    $res = [max(@scores), sum(@scores), nearest(0.001,sum(@topn) / scalar(@topn)), nearest(0.001,sum(@scores)/scalar(@scores))];
   }
   ($filename,$chrom,$start,$stop,$ops,$probdist,@probdist,@scores,$tabixoutput,@tabixoutputlines,$topn) = (); # Get rid of old variables
   return $res;
