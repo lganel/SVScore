@@ -202,10 +202,9 @@ while (my $inputline = <IN>) {
   }
   # Parse line
   my @splitline = split(/\s+/,$inputline);
-  my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $info_a, $info_b) = @splitline[0..6, 12, 13];
+  my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $svtype, $info_a, $info_b) = @splitline[0..6, 10, 12, 13];
 #  my ($mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,@cipos,@ciend,$mateoutputline,@splitmateline,$mateinfo,$mateline);
 
-  my ($svtype) = ($info_a =~ /SVTYPE=([^;]+)/);
   unless (exists $types{$svtype}) {
     warn "Unrecognized SVTYPE $svtype at line ",$.," of preprocessed VCF file\n";
     print $inputline;
@@ -304,8 +303,10 @@ while (my $inputline = <IN>) {
     ## At worst, $leftintrons and $rightintrons are lists of introns. The only case in which the gene is not disrupted is if both lists are equal and nonempty, meaning that in every gene hit by this variant, both ends of the variant are confined to the same intron
     my $sameintrons = scalar (grep {$leftintrons{$_}} @rightintrons) == scalar @rightintrons && scalar @rightintrons > 0;
     unless ($sameintrons) {
-      $scores{"LTRUNC"} = truncationscore($leftchrom, $leftstart, $leftstop, $leftgenenames, \%genes, $caddfile, $ops, $topn);
-      $scores{"RTRUNC"} = truncationscore($rightchrom, $rightstart, $rightstop, $rightgenenames, \%genes, $caddfile, $ops, $topn);
+      my $leftscore = truncationscore($leftchrom, $leftstart, $leftstop, $leftgenenames, \%genes, $caddfile, $ops, $topn);
+      $scores{"LTRUNC"} = $leftscore if $leftscore;
+      my $rightscore = truncationscore($rightchrom, $rightstart, $rightstop, $rightgenenames, \%genes, $caddfile, $ops, $topn);
+      $scores{"RTRUNC"} = $rightscore if $rightscore;
     }
   }
 
@@ -371,6 +372,9 @@ while (my $inputline = <IN>) {
 #    ($sameintrons, %leftintrons,@rightintrons) = (); # Get rid of old variables
 
 # Transpose %scores hash to make taking maxes easy
+#  foreach my $x (@{$scores{$interval}}) { ## DEBUG
+#    print "$x ";
+#  }
   my %scoresbyop = ();
   foreach my $interval (keys %scores) { # LEFT, RIGHT, (SPAN, LTRUNC, RTRUNC)
     foreach my $op (keys %operations) { # MAX, SUM, TOP$topn, MEAN
@@ -381,12 +385,12 @@ while (my $inputline = <IN>) {
 # Calculate maxes and add to info
   my %maxscores = ();
   foreach my $op (keys %scoresbyop) {
-    $info_a .= (";SVSCORE${op}=" . max(@{$scoresbyop{$op}}));
-    $info_b .= (";SVSCORE${op}=" . max(@{$scoresbyop{$op}})) unless $info_b eq ".";
+    $info_a .= (";SVSCORE${op}=" . max(@{$scoresbyop{$op}})) unless $info_a eq "MISSING";
+    $info_b .= (";SVSCORE${op}=" . max(@{$scoresbyop{$op}})) unless $info_b eq "." || $info_b eq "MISSING";
     if ($verbose) {
       foreach my $interval (keys %scores) {
-	$info_a .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]";
-	$info_b .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless $info_b eq ".";
+	$info_a .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless $info_a eq "MISSING";
+	$info_b .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless $info_b eq "." || $info_b eq "MISSING";
       }
     }
   }
@@ -463,7 +467,7 @@ unless ($debug) {
   unlink "$preprocessedfile";
   unlink "$vcfout";
   unlink "$bedpeout";
-  rmdir "svscoretmp";
+  rmdir "svscoretmp" || warn "Could not delete svscoretmp: $!";
 }
 
 sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data
