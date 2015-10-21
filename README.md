@@ -35,7 +35,7 @@ usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-e 
 
 * [tabix](https://github.com/samtools/htslib)
 
-* Your favorite hg19/GRCh37-based, tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download them (functionality courtesy of Colby Chiang).
+* Your favorite hg19/GRCh37-based, tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download RefSeq annotations (functionality courtesy of Colby Chiang).
 
   * If using your own exon file, you must use -n to specify which column contains the desired annotation (typically gene symbol or gene name).
 
