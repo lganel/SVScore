@@ -3,22 +3,22 @@ Prioritize structural variants based on annotations and C scores
 
 # Usage
 ```
-usage: ./svscore.pl [-ds] [-g genefile] [-m geneannotationcolumn] [-e exonfile] [-n exonannotationcolumn] [-c caddfile] vcf
-    -d	      Debug (verbose) mode, keeps intermediate and supporting files
+usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-e exonfile] [-c caddfile] vcf
+    -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -s	      Create/download supporting files and quit
-    -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
+    -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
+    -w	      Weight CADD scores in breakends by probability distribution (requires PRPOS/PREND in INFO field)
+    -o	      Specify operation to perform on CADD scores (must be sum, max, top[number], or all - defaults to all)
     -g	      Points to gene BED file (refGene.genes.b37.bed)
     -m	      Column number for annotation in gene BED file to be added to VCF (4)
     -e	      Points to exon BED file (refGene.exons.b37.bed)
-    -n	      Column number for annotation in exon BED file to be added to VCF (4 if using -e, 5 otherwise)
-    -w	      Weight CADD scores in breakends by probability distribution (requires PRPOS/PREND in INFO field)
-    -o	      Specify operation to perform on CADD scores (must be sum, max, top[number], or all - defaults to all)
+    -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
 
     --help    Display this message
     --version Display version
 ```
 
--o specifies the operation used to calculate SVScores. "sum" and "max" report the sum and maximum of each interval respectively, while "top[number]" reports the sum of the top [number] scores in each interval and "all" reports the maximum score, sum of all scores, and sum of the top 100 scores for each interval. This option is case insensitive. Under -o top[number] or -o all, if the interval is small than [number] positions (100 in the case of all), then the top[number] score is equal to the sum score.
+-o specifies the operation used to calculate SVScores. "sum" and "max" report the sum and maximum of each interval respectively, while "top" reports the sum of the top 100 scores in each interval (use -t to use a different number of scores) and "all" reports the maximum score, sum of all scores, and sum of the top 100 scores for each interval. This option is case insensitive. Under -o top[number] or -o all, if the interval is smaller than [number] positions, then the top[number] score is equal to the sum score.
 
 # Dependencies
 * A Linux-like system with a Bash-like shell
@@ -28,6 +28,8 @@ usage: ./svscore.pl [-ds] [-g genefile] [-m geneannotationcolumn] [-e exonfile] 
 * [vcfanno](https://www.github.com/brentp/vcfanno) v0.0.7
 
 * [bedtools](https://www.github.com/arq5x/bedtools2)
+
+* [svtools](https://github.com/hall-lab/svtools)
 
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from v1.3 of [CADD](http://cadd.gs.washington.edu/download) 
 
@@ -40,25 +42,9 @@ usage: ./svscore.pl [-ds] [-g genefile] [-m geneannotationcolumn] [-e exonfile] 
   * SVScore expects custom gene annotation files to contain gene symbol/gene name in column 4 (though this can be changed with -m) and strand information in column 5
   
 # Notes
-SVScore outputs a VCF file with the following scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added.
-  * Under -o max or -o all
-      1. SVSCOREMAX_LEFT for all variants - max C score within the left breakend
-      2. SVSCOREMAX_RIGHT for all variants - max C score within the right breakend
-      3. SVSCOREMAX_SPAN for DEL/DUP - max C score within the span
-      4. SVSCOREMAX_LTRUNC for BND/INV variants whose left breakend seems to truncate a gene - max C score within gene downstream of beginning of left breakend 
-      5. SVSCOREMAX_RTRUNC for BND/INV variants whose right breakend seems to truncate a gene - max C score within gene downstream of beginning of right breakend 
-  * Under -o sum or -o all
-      1. SVSCORESUM_LEFT for all variants - sum of C scores within the left breakend
-      2. SVSCORESUM_RIGHT for all variants - sum of C scores within the right breakend
-      3. SVSCORESUM_SPAN for DEL/DUP - sum of C scores within the span
-      4. SVSCORESUM_LTRUNC for BND/INV variants whose left breakend seems to truncate a gene - sum of C scores within gene downstream of beginning of left breakend 
-      5. SVSCORESUM_RTRUNC for BND/INV variants whose right breakend seems to truncate a gene - sum of C scores within gene downstream of beginning of right breakend 
-  * Under -o top[number] or -o all
-      1. SVSCORETOP[number]_LEFT for all variants - sum of top [number] C scores within the left breakend
-      2. SVSCORETOP[number]_RIGHT for all variants - sum of top [number] C scores within the right breakend
-      3. SVSCORETOP[number]_SPAN for DEL/DUP - sum of top [number] C scores within the span
-      4. SVSCORETOP[number]_LTRUNC for BND/INV variants whose left breakend seems to truncate a gene - sum of top [number] C scores within gene downstream of beginning of left breakend 
-      5. SVSCORETOP[number]_RTRUNC for BND/INV variants whose right breakend seems to truncate a gene - sum of top [number] C scores within gene downstream of beginning of right breakend 
+The following must be in your path to use SVScore: svtools/bin, vcfanno, bedtools, tabix
+
+SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE{$op}(_{$interval}). $op represents the operation used to calculate that score, which is one of max, sum, top (mean of top n scores in the interval), or mean. $interval represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/TRX variants which seem to truncate a gene on the left side, the interval is from the left breakend to the end of the gene), and right truncation score. Scores with no interval are the maximum over all intervals for that operation.
 
 SVScore creates a file of introns (unless a file called introns.bed already exists in the current directory) by subtracting the exon file from the gene file using bedtools. So, if there is already file called introns.bed in the current directory, rename it or SVScore will not work correctly.
 
