@@ -1,4 +1,5 @@
 ## 0.4 (Under development)
+ * Account for regions of the genome which do not have CADD scores
  * Fixed sorting incompatibilities with vcfanno
  * Implemented -o TOP (mean of top n bases) and -o MEAN options
  * Added -t (number of bases to use in -o top) and -v (verbose) options

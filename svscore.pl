@@ -107,59 +107,62 @@ if (defined $ARGV[0]) {
   $bedpeout = "svscoretmp/$prefix$time.out.bedpe";
   $vcfout = "svscoretmp/$prefix$time.out.vcf";
   open(IN, "< $preprocessedfile") || die "Could not open $preprocessedfile: $!";
-  open(OUT, "> $bedpeout") || die "Could not open output file: $!";
+  open(OUT, "> $bedpeout") || die "Could not open output file: $!" unless $support;
 
   # Update header
-  open(HEADER, "grep \"^#\" $preprocessedfile |") || die "Error grabbing header: $!";
-  my @newheader = ();
-  my @oldheader = <HEADER>;
-  close HEADER;
-  my $headerline;
-  while(($headerline = (shift @oldheader)) !~ /^##INFO/) {
-    push @newheader, $headerline;
-  }
-  unshift @oldheader, $headerline; # Return first info line to top of stack
-  while(($headerline = (shift @oldheader)) =~ /^##INFO/) {
-    push @newheader, $headerline;
-  }
-  unshift @oldheader, $headerline; # Return first format line to top of stack
+  unless ($support) {
+    open(HEADER, "grep \"^#\" $preprocessedfile |") || die "Error grabbing header: $!";
+    my @newheader = ();
+    my @oldheader = <HEADER>;
+    close HEADER;
+    die "Header indicates that SVScore has already been run on this file. Please remove these annotations and header lines to avoid confusion between old and new scores" if grep {/^##INFO=<ID=SVSCORE/} @oldheader;
+    my $headerline;
+    while(($headerline = (shift @oldheader)) !~ /^##INFO/) {
+      push @newheader, $headerline;
+    }
+    unshift @oldheader, $headerline; # Return first info line to top of stack
+    while(($headerline = (shift @oldheader)) =~ /^##INFO/) {
+      push @newheader, $headerline;
+    }
+    unshift @oldheader, $headerline; # Return first format line to top of stack
 
-  if ($ops eq 'MAX' || $ops eq 'ALL') {
-    push @newheader, "##INFO=<ID=SVSCOREMAX_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-    push @newheader, "##INFO=<ID=SVSCOREMAX_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-    push @newheader, "##INFO=<ID=SVSCOREMAX_SPAN,Number=1,Type=Float,Description=\"Maximum C score in outer span of structural variant\">\n";
-    push @newheader, "##INFO=<ID=SVSCOREMAX_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of truncated gene\">\n";
-    push @newheader, "##INFO=<ID=SVSCOREMAX_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of truncated gene\">\n";
-  }
-  if ($ops eq 'SUM' || $ops eq 'ALL') {
-    push @newheader, "##INFO=<ID=SVSCORESUM_LEFT,Number=1,Type=Float,Description=\"Sum of C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-    push @newheader, "##INFO=<ID=SVSCORESUM_RIGHT,Number=1,Type=Float,Description=\"Sum of C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-    push @newheader, "##INFO=<ID=SVSCORESUM_SPAN,Number=1,Type=Float,Description=\"Sum of C scores in outer span of structural variant\">\n";
-    push @newheader, "##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of truncated gene\">\n";
-    push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of truncated gene\">\n";
-  }
-  if ($ops eq 'TOP' || $ops eq 'ALL') {
-    push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LEFT,Number=1,Type=Float,Description=\"Mean of top $topn C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-    push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RIGHT,Number=1,Type=Float,Description=\"Mean of top $topn C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-    push @newheader, "##INFO=<ID=SVSCORETOP${topn}_SPAN,Number=1,Type=Float,Description=\"Mean of top $topn C scores in outer span of structural variant\">\n";
-    push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LTRUNC,Number=1,Type=Float,Description=\"Mean of top $topn C scores from beginning of left breakend to end of truncated gene\">\n";
-    push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RTRUNC,Number=1,Type=Float,Description=\"Mean of top $topn C scores from beginning of right breakend to end of truncated gene\">\n";
-  }
-  if ($ops eq 'MEAN' || $ops eq 'ALL') {
-    push @newheader, "##INFO=<ID=SVSCOREMEAN_LEFT,Number=1,Type=Float,Description=\"Mean of C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-    push @newheader, "##INFO=<ID=SVSCOREMEAN_RIGHT,Number=1,Type=Float,Description=\"Mean of C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-    push @newheader, "##INFO=<ID=SVSCOREMEAN_SPAN,Number=1,Type=Float,Description=\"Mean of C scores in outer span of structural variant\">\n";
-    push @newheader, "##INFO=<ID=SVSCOREMEAN_LTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of left breakend to end of truncated gene\">\n";
-    push @newheader, "##INFO=<ID=SVSCOREMEAN_RTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of right breakend to end of truncated gene\">\n";
-  }
-  push @newheader, @oldheader;
+    if ($ops eq 'MAX' || $ops eq 'ALL') {
+      push @newheader, "##INFO=<ID=SVSCOREMAX_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMAX_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMAX_SPAN,Number=1,Type=Float,Description=\"Maximum C score in outer span of structural variant\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMAX_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of truncated gene\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMAX_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of truncated gene\">\n";
+    }
+    if ($ops eq 'SUM' || $ops eq 'ALL') {
+      push @newheader, "##INFO=<ID=SVSCORESUM_LEFT,Number=1,Type=Float,Description=\"Sum of C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORESUM_RIGHT,Number=1,Type=Float,Description=\"Sum of C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORESUM_SPAN,Number=1,Type=Float,Description=\"Sum of C scores in outer span of structural variant\">\n";
+      push @newheader, "##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of truncated gene\">\n";
+      push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of truncated gene\">\n";
+    }
+    if ($ops eq 'TOP' || $ops eq 'ALL') {
+      push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LEFT,Number=1,Type=Float,Description=\"Mean of top $topn C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RIGHT,Number=1,Type=Float,Description=\"Mean of top $topn C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORETOP${topn}_SPAN,Number=1,Type=Float,Description=\"Mean of top $topn C scores in outer span of structural variant\">\n";
+      push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LTRUNC,Number=1,Type=Float,Description=\"Mean of top $topn C scores from beginning of left breakend to end of truncated gene\">\n";
+      push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RTRUNC,Number=1,Type=Float,Description=\"Mean of top $topn C scores from beginning of right breakend to end of truncated gene\">\n";
+    }
+    if ($ops eq 'MEAN' || $ops eq 'ALL') {
+      push @newheader, "##INFO=<ID=SVSCOREMEAN_LEFT,Number=1,Type=Float,Description=\"Mean of C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMEAN_RIGHT,Number=1,Type=Float,Description=\"Mean of C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMEAN_SPAN,Number=1,Type=Float,Description=\"Mean of C scores in outer span of structural variant\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMEAN_LTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of left breakend to end of truncated gene\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMEAN_RTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of right breakend to end of truncated gene\">\n";
+    }
+    push @newheader, @oldheader;
 #  open(HEADER, "> $headerfile") || die "Could not open $headerfile: $!";
-  foreach (@newheader) {
-    print OUT;
-  }
-  if ($weight && !(grep {/^##INFO=<ID=PRPOS,/} @newheader)) {
-    $weight = "";
-    warn "PRPOS not found in header - SVScore will not weight CADD scores\n";
+    foreach (@newheader) {
+      print OUT;
+    }
+    if ($weight && !(grep {/^##INFO=<ID=PRPOS,/} @newheader)) {
+      $weight = "";
+      warn "PRPOS not found in header - SVScore will not weight CADD scores\n";
+    }
   }
 
   # Create and execute second preprocessing command
@@ -175,7 +178,7 @@ if (defined $ARGV[0]) {
 }
 
 if ($support) {
-  unlink $preprocessedfile if defined $ARGV[0];
+  unlink $preprocessedfile if (defined $ARGV[0] && !$debug);
   die;
 }
 
@@ -205,6 +208,7 @@ while (my $inputline = <IN>) {
   my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $svtype, $info_a, $info_b) = @splitline[0..6, 10, 12, 13];
 #  my ($mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,@cipos,@ciend,$mateoutputline,@splitmateline,$mateinfo,$mateline);
 
+  $svtype = substr($svtype, 0, 3);
   unless (exists $types{$svtype}) {
     warn "Unrecognized SVTYPE $svtype at line ",$.," of preprocessed VCF file\n";
     print $inputline;
@@ -460,8 +464,8 @@ while (my $inputline = <IN>) {
 close OUT;
 system("bedpetovcf -b $bedpeout > $vcfout");
 system("grep \"^#\" $vcfout > $vcfout.header");
-print `grep -v "^#" $vcfout | sort -k1,1n -k2,2n | cat $vcfout.header -`;
-unlink "$vcfout.header"; ## BRINGBACK
+print `grep -v "^#" $vcfout | sort -k1,1V -k2,2n | cat $vcfout.header -`;
+unlink "$vcfout.header";
 
 unless ($debug) {
   unlink "$preprocessedfile";
@@ -474,10 +478,13 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist, $topn) = @_;
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
-  return ($ops eq 'ALL' ? [-1, -1, -1 -1] : [-1]) if ($stop-$start>1000000); # Short circuit if region is too big - this is usually caused by faulty annotations
+#  if ($stop-$start>1000000) {## DEBUG
+#    return ($ops eq 'ALL' ? [-1, -1, -1 -1] : [-1]) if ($stop-$start>1000000); # Short circuit if region is too big - this is usually caused by faulty annotations
+#    print STDERR "Interval too big: $chrom:$start-$stop\n";
+#  }
   my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
   my @tabixoutputlines = split(/\n/,$tabixoutput);
-  return ($ops eq 'ALL' ? [-1, -1, -1 -1] : [-1]) unless (@tabixoutputlines == 3 * ($stop-$start+1)); # Short circuit if variant hits region with no C scores
+  return ($ops eq 'ALL' ? [-1, -1, -1, -1] : [-1]) unless @tabixoutputlines; # Short circuit if interval has no C scores
   
   my %allscores = (); # Hash from position to list of scores
   foreach my $line (@tabixoutputlines) { # Populate hash
@@ -492,7 +499,7 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   if ($ops eq 'MAX') {
     $res = [max(@scores)];
   } elsif ($ops eq 'SUM') {
-    $res = [sum(@scores)];
+    $res = [nearest(0.001,sum(@scores))];
   } elsif ($ops=~/^TOP/) {
     $topn = min($topn, scalar @scores);
     my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
@@ -502,7 +509,7 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   } else {
     $topn = min($topn, scalar @scores);
     my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
-    $res = [max(@scores), sum(@scores), nearest(0.001,sum(@topn) / scalar(@topn)), nearest(0.001,sum(@scores)/scalar(@scores))];
+    $res = [max(@scores), nearest(0.001,sum(@scores)), nearest(0.001,sum(@topn) / scalar(@topn)), nearest(0.001,sum(@scores)/scalar(@scores))];
   }
   ($filename,$chrom,$start,$stop,$ops,$probdist,@probdist,@scores,$tabixoutput,@tabixoutputlines,$topn) = (); # Get rid of old variables
   return $res;
