@@ -47,41 +47,62 @@ if ($ops eq 'ALL' || $ops eq 'TOP') {
   delete $operations{"TOP"};
 }
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
-my ($headerfile, $preprocessedfile, $bedpeout, $vcfout);
+my ($headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
   print STDERR "Generating exon file\n" if $debug;
-  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -k 1,1n -k 2,2n | uniq > refGene.exons.b37.bed");
+  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -k 1,1V -k 2,2n | uniq > refGene.exons.b37.bed");
 } elsif ($exonfile ne 'refGene.exons.b37.bed' && !-s $exonfile) {
   die "$exonfile not found or empty!";
 }
 
 if ($genefile eq 'refGene.genes.b37.bed' && !-s $genefile) { # Generate gene file if necessary
   print STDERR "Generating gene file\n" if $debug;
-  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$13,\$4}' OFS=\"\\t\" | sort -k 1,1n -k 2,2n | uniq > refGene.genes.b37.bed");
+  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$13,\$4}' OFS=\"\\t\" | sort -k 1,1V -k 2,2n | uniq > refGene.genes.b37.bed");
 } elsif ($genefile ne 'refGene.genes.b37.bed' && !-s $genefile) {
   die "$genefile not found or empty!";
 }
 
-unless (-s 'introns.bed') { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming introns.bed has no header line) and sort
+mkdir "svscoretmp" unless -d "svscoretmp";
+my $intronfile = "introns.$genefile.$exonfile.bed.gz";
+unless (-s "$intronfile") { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming intron file has no header line) and sort
   print STDERR "Generating intron file\n" if $debug;
-  system("bedtools subtract -a $genefile -b $exonfile | sort -u -k 1,1n -k 2,2n | awk '{print \$0 \"\t\" NR}' > introns.bed");
+  system("bedtools subtract -a $genefile -b $exonfile | sort -u -k1,1V -k2,2n | awk '{print \$0 \"\t\" NR}' | bgzip -c > $intronfile");
 }
 
-my $intronnumcolumn = `head -n 1 introns.bed | awk '{print NF}'`; # Figure out which column has the intron number
+# Use tabix to index the annotation files
+unless (-s "$intronfile.tbi") {
+  print STDERR "Tabix indexing $intronfile\n" if $debug;
+  if(system("tabix -p bed $intronfile")) {
+    die "Tabix failed on $intronfile";
+  }
+}
+warn "$genefile\n"; ## DEBUG
+unless ($genefile =~ /\.gz$/) {
+  print STDERR "bgzipping $genefile\n" if $debug;
+  system("bgzip -c $genefile > $genefile.gz");
+  $genefile = "$genefile.gz";
+}
+unless (-s "$genefile.tbi") {
+  print STDERR "Tabix indexing $genefile\n" if $debug;
+  if(system("tabix -p bed $genefile")) {
+    die "Tabix failed on $genefile";
+  }
+}
+
+my $intronnumcolumn = `zcat $intronfile | head -n 1 | awk '{print NF}'`; # Figure out which column has the intron number
 chomp $intronnumcolumn;
 
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
 open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[4]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"introns.bed\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]";
+print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[4]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]\n";
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-mkdir "svscoretmp" unless -d "svscoretmp";
 my ($prefix, $time);
 if (defined $ARGV[0]) {
   print STDERR "Preparing preprocessing command\n" if $debug;
@@ -90,12 +111,12 @@ if (defined $ARGV[0]) {
   # Tag intermediate files with timestamp to avoid collisions
   $time = gettimeofday();
   $preprocessedfile = "svscoretmp/$prefix.preprocess$time.bedpe";
+  $sortedfile = "svscoretmp/$prefix.sort$time.vcf.gz";
   #$annfile = "svscoretmp/$prefix.ann$time.bedpe";
 #  $headerfile = "svscoretmp/${prefix}header$time";
-  my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1n -k2,2n\" }' | vcfanno -ends conf.toml - | vcftobedpe > $preprocessedfile"; #; grep '^#' $preprocessedfile > $headerfile"; # Sort, annotate, convert to BEDPE, grab header
+  my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | vcftobedpe > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi"; #; grep '^#' $preprocessedfile > $headerfile"; # Sort, annotate, convert to BEDPE, grab header
   print STDERR "Preprocessing command: $preprocess\n" if $debug;
   if (system($preprocess)) {
-#    unlink $annfile unless $debug;
     unless ($debug) {
 #      unlink $headerfile;
       unlink $preprocessedfile;
@@ -178,13 +199,15 @@ if (defined $ARGV[0]) {
 }
 
 if ($support) {
-  unlink $preprocessedfile if (defined $ARGV[0] && !$debug);
+  if (defined $ARGV[0] && !$debug) {
+    unlink $preprocessedfile;
+  }
   die;
 }
 
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
-open(GENES, "< $genefile") || die "Could not open $genefile: $!";
+open(GENES, "zcat $genefile |") || die "Could not open $genefile: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
   my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = split(/\s+/,$geneline);
   if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume strand stays constant
@@ -468,9 +491,9 @@ print `grep -v "^#" $vcfout | sort -k1,1V -k2,2n | cat $vcfout.header -`;
 unlink "$vcfout.header";
 
 unless ($debug) {
-  unlink "$preprocessedfile";
-  unlink "$vcfout";
-  unlink "$bedpeout";
+  unlink $preprocessedfile;
+  unlink $vcfout;
+  unlink $bedpeout;
   rmdir "svscoretmp" || warn "Could not delete svscoretmp: $!";
 }
 

@@ -37,8 +37,6 @@ usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-e 
 
 * Your favorite hg19/GRCh37-based, tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download RefSeq annotations (functionality courtesy of Colby Chiang).
 
-  * If using your own exon file, you must use -n to specify which column contains the desired annotation (typically gene symbol or gene name).
-
   * SVScore expects custom gene annotation files to contain gene symbol/gene name in column 4 (though this can be changed with -m) and strand information in column 5
   
 # Notes
