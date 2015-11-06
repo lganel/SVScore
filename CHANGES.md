@@ -3,7 +3,7 @@
  * Use vcfanno 0.0.8
  * Fixed sorting incompatibilities with vcfanno
  * Implemented -o TOP (mean of top n bases) and -o MEAN options
- * Added -t (number of bases to use in -o top) and -v (verbose) options
+ * Added -t (number of bases to use in -o top), -p (gene file strand column), and -v (verbose) options
  * Removed exon annotation and -n (SVScore still requires an exon file to create intron file)
  * Added support for CNV and MEI variant types (treated as DELs/DUPs)
  * Replaced BND with TRX, BNDs still supported but only left/right breakend scores are calculated

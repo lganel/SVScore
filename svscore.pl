@@ -20,9 +20,9 @@ my %possibleoperations = ("MAX", 0, "SUM", 1, "TOP", 2, "MEAN", 3); # Hash of su
 my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "INS", "CNV", "MEI"); # Hash of supported svtypes
 
 my %options = ();
-getopts('dswvc:g:e:m:o:t:',\%options);
+getopts('dswvc:g:e:m:o:t:p:',\%options);
 
-# Parse command line options, set variables
+# Parse command line options, set variables, check input parameters
 my $debug = defined $options{'d'};
 my $support = defined $options{'s'};
 my $weight = defined $options{'w'};
@@ -33,8 +33,13 @@ my $verbose = defined $options{'v'};
 my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
 die "Could not find $caddfile" unless -s $caddfile;
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed');
-my $geneanncolumn = (defined $options{'m'} && defined $options{'g'} ? $options{'m'} : 4);
-warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation column (4)" if defined $options{'m'} && !defined $options{'g'};
+my $geneanncolumn = (defined $options{'m'} && defined $options{'g'} ? $options{'m'}-1 : 3);
+$geneanncolumn = 3 && warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation column (4)" if defined $options{'m'} && !defined $options{'g'};
+$geneanncolumn = 3 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)" if $geneanncolumn <= 3;
+my $genestrandcolumn = (defined $options{'p'} ? $options{'p'}-1 : 4);
+$genestrandcolumn = 4 && warn "Gene strand column provided without nonstandard gene annotation file - defaulting to standard gene strand column (5)" if defined $options{'m'} && !defined $options{'g'};
+$genestrandcolumn = 4 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene strand column (5)" if $geneanncolumn <= 3;
+die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==$genestrandcolumn;
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
 #my $exonanncolumn = (defined $options{'n'} && defined $options{'e'} ? $options{'n'} : (defined $options{'e'} ? 4 : 5));
 #warn "Exon annotation column provided without nonstandard exon annotation file - defaulting to standard exon annotation column (5)" if defined $options{'n'} && !defined $options{'e'};
@@ -48,7 +53,7 @@ if ($ops eq 'ALL' || $ops eq 'TOP') {
   delete $operations{"TOP"};
 }
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
-my ($headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
+my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $compressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
 
@@ -67,11 +72,57 @@ if ($genefile eq 'refGene.genes.b37.bed' && !-s $genefile) { # Generate gene fil
   die "$genefile not found or empty!";
 }
 
+# Zip/unzip annotation files as necessary
+if ($genefile =~ /\.gz/) {
+  $compressedgenefile = $genefile;
+  $uncompressedgenefile = ($genefile =~ /(.*)\.gz$/);
+  unless (-s $uncompressedgenefile) {
+    $alteredgenefile = 1;
+    print STDERR "Unzipping $genefile\n" if $debug;
+    if (system("zcat $genefile > $uncompressedgenefile")) {
+      die "Unzipping $genefile failed: $!";
+    }
+  }
+} else {
+  $uncompressedgenefile = $genefile;
+  $compressedgenefile = "$genefile.gz";
+  unless(-s $compressedgenefile) {
+    $alteredgenefile = 1;
+    print STDERR "Zipping $genefile\n" if $debug;
+    if (system("bgzip -c $genefile > $compressedgenefile")) {
+      die "Compressing $genefile failed: $!";
+    }
+  }
+}
+
+if ($exonfile =~ /\.gz/) {
+  $compressedexonfile = $exonfile;
+  $uncompressedexonfile = ($exonfile =~ /(.*)\.gz$/);
+  unless (-s $uncompressedexonfile) {
+    $alteredexonfile = 1;
+    print STDERR "Unzipping $exonfile\n" if $debug;
+    if (system("zcat $exonfile > $uncompressedexonfile")) {
+      die "Unzipping $exonfile failed: $!";
+    }
+  }
+} else {
+  $uncompressedexonfile = $exonfile;
+  $compressedexonfile = "$exonfile.gz";
+  unless(-s $compressedexonfile) {
+    $alteredexonfile = 1;
+    print STDERR "Zipping $exonfile\n" if $debug;
+    if (system("bgzip -c $exonfile > $compressedexonfile")) {
+      die "Compressing $exonfile failed: $!";
+    }
+  }
+}
+
 mkdir "svscoretmp" unless -d "svscoretmp";
+
 my $intronfile = "introns.$genefile.$exonfile.bed.gz";
 unless (-s "$intronfile") { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming intron file has no header line) and sort
   print STDERR "Generating intron file\n" if $debug;
-  system("bedtools subtract -a $genefile -b $exonfile | sort -u -k1,1V -k2,2n | awk '{print \$0 \"\t\" NR}' | bgzip -c > $intronfile");
+  system("bedtools subtract -a $uncompressedgenefile -b $uncompressedexonfile | sort -u -k1,1V -k2,2n | awk '{print \$0 \"\t\" NR}' | bgzip -c > $intronfile");
 }
 
 # Use tabix to index the annotation files
@@ -81,12 +132,7 @@ unless (-s "$intronfile.tbi") {
     die "Tabix failed on $intronfile";
   }
 }
-unless ($genefile =~ /\.gz$/) {
-  print STDERR "bgzipping $genefile\n" if $debug;
-  system("bgzip -c $genefile > $genefile.gz");
-  $genefile = "$genefile.gz";
-}
-unless (-s "$genefile.tbi") {
+unless (-s "$compressedgenefile.tbi") {
   print STDERR "Tabix indexing $genefile\n" if $debug;
   if(system("tabix -p bed $genefile")) {
     die "Tabix failed on $genefile";
@@ -99,7 +145,7 @@ chomp $intronnumcolumn;
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
 open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[4]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]\n";
+print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[$geneanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]\n";
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
@@ -207,9 +253,9 @@ if ($support) {
 
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
-open(GENES, "zcat $genefile |") || die "Could not open $genefile: $!";
+open(GENES, "$uncompressedgenefile") || die "Could not open $genefile: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
-  my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = split(/\s+/,$geneline);
+  my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = (split(/\s+/,$geneline))[0..2,$geneanncolumn,$genestrandcolumn];
   if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume strand stays constant
     $genes{$genesymbol}->{$genechrom}->[0] = min($genes{$genesymbol}->{$genechrom}->[0], $genestart);
     $genes{$genesymbol}->{$genechrom}->[1] = max($genes{$genesymbol}->{$genechrom}->[1], $genestop);
@@ -486,15 +532,35 @@ while (my $inputline = <IN>) {
 
 close IN;
 close OUT;
+
+# Convert back to vcf, sort, and add header
 system("bedpetovcf -b $bedpeout > $vcfout");
 system("grep \"^#\" $vcfout > $vcfout.header");
 print `grep -v "^#" $vcfout | sort -k1,1V -k2,2n | cat $vcfout.header -`;
 unlink "$vcfout.header";
 
+# Clean up
 unless ($debug) {
   unlink $preprocessedfile;
   unlink $vcfout;
   unlink $bedpeout;
+  
+  if ($alteredgenefile) {
+    if ($genefile =~ /\.gz$/) {
+      unlink $uncompressedgenefile;
+    } else {
+      unlink $compressedgenefile;
+    }
+  }
+
+  if ($alteredexonfile) {
+    if ($exonfile =~ /\.gz$/) {
+      unlink $uncompressedexonfile;
+    } else {
+      unlink $compressedexonfile;
+    }
+  }
+
   if(system("rmdir svscoretmp")){
     warn "Could not delete svscoretmp: $!";
     opendir(SVSCORETMP, "svscoretmp") || warn "Could not open svscoretmp: $!"; ## DEBUG
@@ -588,7 +654,7 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
 }
 
 sub main::HELP_MESSAGE() {
-  print "usage: ./svscore.pl [-dsvw] [-o op] [-t topnumber] [-g genefile] [-m geneannotationcolumn] [-e exonfile] [-c caddfile] vcf
+  print "usage: ./svscore.pl [-dsvw] [-o op] [-t topnumber] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] vcf
     -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -s	      Create/download supporting files and quit
     -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
@@ -597,6 +663,7 @@ sub main::HELP_MESSAGE() {
     -t	      Number of bases for TOP to take mean of (under -o top or -o all) (100)
     -g	      Points to gene BED file (refGene.genes.b37.bed)
     -m	      Column number for annotation in gene BED file to be added to VCF (4)
+    -p	      Column number for strand in gene BED file (5)
     -e	      Points to exon BED file (refGene.exons.b37.bed)
     -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
 

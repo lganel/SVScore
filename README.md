@@ -3,7 +3,7 @@ Prioritize structural variants based on annotations and C scores
 
 # Usage
 ```
-usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-e exonfile] [-c caddfile] vcf
+usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] vcf
     -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -s	      Create/download supporting files and quit
     -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
@@ -11,6 +11,7 @@ usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-e 
     -o	      Specify operation to perform on CADD scores (must be sum, max, top[number], or all - defaults to all)
     -g	      Points to gene BED file (refGene.genes.b37.bed)
     -m	      Column number for annotation in gene BED file to be added to VCF (4)
+    -p	      Column number for strand in gene BED file (5)
     -e	      Points to exon BED file (refGene.exons.b37.bed)
     -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
 
@@ -37,14 +38,14 @@ usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-e 
 
 * Your favorite hg19/GRCh37-based, tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download RefSeq annotations (functionality courtesy of Colby Chiang).
 
-  * SVScore expects custom gene annotation files to contain gene symbol/gene name in column 4 (though this can be changed with -m) and strand information in column 5
+  * SVScore expects custom gene annotation files to contain gene symbol/gene name in column 4 and strand information in column 5 (though these can be changed with -m and -p)
   
 # Notes
 The following must be in your path to use SVScore: svtools/bin, vcfanno, bedtools, tabix
 
 SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE{$op}(_{$interval}). $op represents the operation used to calculate that score, which is one of max, sum, top (mean of top n scores in the interval), or mean. $interval represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/TRX variants which seem to truncate a gene on the left side, the interval is from the left breakend to the end of the gene), and right truncation score. Scores with no interval listed are the maximum over all intervals for that operation.
 
-Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompressed input files should not end with this suffix. Annotation files may be gzipped or unzipped
+Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompressed input files should not end with this suffix. Annotation files may be gzipped or unzipped. SVScore will zip/unzip files as necessary using bgzip and zcat.
 
 For BND variants, primary mate is considered the left breakend and the secondary mate is considered the right breakend.
 
