@@ -10,6 +10,7 @@ use List::Util qw(max min sum);
 use List::MoreUtils qw(pairwise);
 use Time::HiRes qw(gettimeofday);
 use Math::Round qw(nearest);
+use Data::Dumper;
 
 sub main::HELP_MESSAGE(); # Declaration to make perl happy
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
@@ -80,7 +81,6 @@ unless (-s "$intronfile.tbi") {
     die "Tabix failed on $intronfile";
   }
 }
-warn "$genefile\n"; ## DEBUG
 unless ($genefile =~ /\.gz$/) {
   print STDERR "bgzipping $genefile\n" if $debug;
   system("bgzip -c $genefile > $genefile.gz");
@@ -484,6 +484,7 @@ while (my $inputline = <IN>) {
 #  print "$outputlines[$i]\n";
 #}
 
+close IN;
 close OUT;
 system("bedpetovcf -b $bedpeout > $vcfout");
 system("grep \"^#\" $vcfout > $vcfout.header");
@@ -494,7 +495,12 @@ unless ($debug) {
   unlink $preprocessedfile;
   unlink $vcfout;
   unlink $bedpeout;
-  rmdir "svscoretmp" || warn "Could not delete svscoretmp: $!";
+  if(system("rmdir svscoretmp")){
+    warn "Could not delete svscoretmp: $!";
+    opendir(SVSCORETMP, "svscoretmp") || warn "Could not open svscoretmp: $!"; ## DEBUG
+    my @files = readdir SVSCORETMP; # DEBUG
+    print STDERR "@files","\n"; ## DEBUG
+  }
 }
 
 sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data

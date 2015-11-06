@@ -33,7 +33,7 @@ usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-e 
 
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from v1.3 of [CADD](http://cadd.gs.washington.edu/download) 
 
-* [tabix](https://github.com/samtools/htslib)
+* [tabix/bgzip](https://github.com/samtools/htslib)
 
 * Your favorite hg19/GRCh37-based, tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download RefSeq annotations (functionality courtesy of Colby Chiang).
 
@@ -44,9 +44,7 @@ The following must be in your path to use SVScore: svtools/bin, vcfanno, bedtool
 
 SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE{$op}(_{$interval}). $op represents the operation used to calculate that score, which is one of max, sum, top (mean of top n scores in the interval), or mean. $interval represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/TRX variants which seem to truncate a gene on the left side, the interval is from the left breakend to the end of the gene), and right truncation score. Scores with no interval listed are the maximum over all intervals for that operation.
 
-SVScore creates a file of introns (unless a file called introns.bed already exists in the current directory) by subtracting the exon file from the gene file using bedtools. So, if there is already file called introns.bed in the current directory, rename it or SVScore will not work correctly.
-
-Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompressed input files should not end with this suffix.
+Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompressed input files should not end with this suffix. Annotation files may be gzipped or unzipped
 
 For BND variants, primary mate is considered the left breakend and the secondary mate is considered the right breakend.
 
