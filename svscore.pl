@@ -33,12 +33,12 @@ my $verbose = defined $options{'v'};
 my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
 die "Could not find $caddfile" unless -s $caddfile;
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed');
-my $geneanncolumn = (defined $options{'m'} && defined $options{'g'} ? $options{'m'}-1 : 3);
-$geneanncolumn = 3 && warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation column (4)" if defined $options{'m'} && !defined $options{'g'};
-$geneanncolumn = 3 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)" if $geneanncolumn <= 3;
-my $genestrandcolumn = (defined $options{'p'} ? $options{'p'}-1 : 4);
-$genestrandcolumn = 4 && warn "Gene strand column provided without nonstandard gene annotation file - defaulting to standard gene strand column (5)" if defined $options{'m'} && !defined $options{'g'};
-$genestrandcolumn = 4 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene strand column (5)" if $geneanncolumn <= 3;
+my $geneanncolumn = (defined $options{'m'} && defined $options{'g'} ? $options{'m'} : 4);
+$geneanncolumn = 4 && warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation column (4)" if defined $options{'m'} && !defined $options{'g'};
+$geneanncolumn = 4 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)" if $geneanncolumn <= 2;
+my $genestrandcolumn = (defined $options{'p'} ? $options{'p'} : 5);
+$genestrandcolumn = 5 && warn "Gene strand column provided without nonstandard gene annotation file - defaulting to standard gene strand column (5)" if defined $options{'m'} && !defined $options{'g'};
+$genestrandcolumn = 5 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene strand column (5)" if $genestrandcolumn <= 3;
 die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==$genestrandcolumn;
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
 #my $exonanncolumn = (defined $options{'n'} && defined $options{'e'} ? $options{'n'} : (defined $options{'e'} ? 4 : 5));
@@ -145,7 +145,7 @@ chomp $intronnumcolumn;
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
 open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-print CONFIG "[[annotation]]\nfile=\"$genefile\"\nnames=[\"Gene\"]\ncolumns=[$geneanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]\n";
+print CONFIG "[[annotation]]\nfile=\"$compressedgenefile\"\nnames=[\"Gene\"]\ncolumns=[$geneanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]\n";
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
@@ -255,7 +255,7 @@ print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
 open(GENES, "$uncompressedgenefile") || die "Could not open $genefile: $!";
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
-  my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = (split(/\s+/,$geneline))[0..2,$geneanncolumn,$genestrandcolumn];
+  my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = (split(/\s+/,$geneline))[0..2,$geneanncolumn-1,$genestrandcolumn-1];
   if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume strand stays constant
     $genes{$genesymbol}->{$genechrom}->[0] = min($genes{$genesymbol}->{$genechrom}->[0], $genestart);
     $genes{$genesymbol}->{$genechrom}->[1] = max($genes{$genesymbol}->{$genechrom}->[1], $genestop);
