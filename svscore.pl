@@ -10,7 +10,6 @@ use List::Util qw(max min sum);
 use List::MoreUtils qw(pairwise);
 use Time::HiRes qw(gettimeofday);
 use Math::Round qw(nearest);
-use Data::Dumper;
 
 sub main::HELP_MESSAGE(); # Declaration to make perl happy
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
@@ -18,6 +17,7 @@ $main::VERSION = '0.4';
 
 my %possibleoperations = ("MAX", 0, "SUM", 1, "TOP", 2, "MEAN", 3); # Hash of supported operations
 my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "INS", "CNV", "MEI"); # Hash of supported svtypes
+my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
 my %options = ();
 getopts('dswvc:g:e:m:o:t:p:',\%options);
@@ -376,9 +376,9 @@ while (my $inputline = <IN>) {
     ## At worst, $leftintrons and $rightintrons are lists of introns. The only case in which the gene is not disrupted is if both lists are equal and nonempty, meaning that in every gene hit by this variant, both ends of the variant are confined to the same intron
     my $sameintrons = scalar (grep {$leftintrons{$_}} @rightintrons) == scalar @rightintrons && scalar @rightintrons > 0;
     unless ($sameintrons) {
-      my $leftscore = truncationscore($leftchrom, $leftstart, $leftstop, $leftgenenames, \%genes, $caddfile, $ops, $topn);
+      my $leftscore = truncationscore($leftchrom, $leftstart, $leftstop, $leftgenenames, \%genes, $caddfile, $ops, $topn, \%operations);
       $scores{"LTRUNC"} = $leftscore if $leftscore;
-      my $rightscore = truncationscore($rightchrom, $rightstart, $rightstop, $rightgenenames, \%genes, $caddfile, $ops, $topn);
+      my $rightscore = truncationscore($rightchrom, $rightstart, $rightstop, $rightgenenames, \%genes, $caddfile, $ops, $topn, \%operations);
       $scores{"RTRUNC"} = $rightscore if $rightscore;
     }
   }
@@ -448,8 +448,9 @@ while (my $inputline = <IN>) {
 #  foreach my $x (@{$scores{$interval}}) { ## DEBUG
 #    print "$x ";
 #  }
+
   my %scoresbyop = ();
-  foreach my $interval (keys %scores) { # LEFT, RIGHT, (SPAN, LTRUNC, RTRUNC)
+  foreach my $interval (sort {$intervals{$a} <=> $intervals{$b}} keys %scores) { # LEFT, RIGHT, (SPAN, LTRUNC, RTRUNC)
     foreach my $op (keys %operations) { # MAX, SUM, TOP$topn, MEAN
       push @{$scoresbyop{$op}}, $scores{$interval}->[$operations{$op}];
     }
@@ -563,9 +564,6 @@ unless ($debug) {
 
   if(system("rmdir svscoretmp")){
     warn "Could not delete svscoretmp: $!";
-    opendir(SVSCORETMP, "svscoretmp") || warn "Could not open svscoretmp: $!"; ## DEBUG
-    my @files = readdir SVSCORETMP; # DEBUG
-    print STDERR "@files","\n"; ## DEBUG
   }
 }
 
@@ -626,10 +624,11 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
 }
 
 sub truncationscore { # Calculate truncation score based on the coordinates of a given breakend and the names of the genes it hits
-  my ($chrom, $start, $stop, $genenames, $genesref, $caddfile, $ops, $topn) = @_;
+  my ($chrom, $start, $stop, $genenames, $genesref, $caddfile, $ops, $topn, $operationsref) = @_;
   return "" unless $genenames;
+  my %operations = %{$operationsref};
   my %genes = %{$genesref};
-  my (@truncationscores, @truncationscoressum, @truncationscorestop);
+  my %truncationscores;
   foreach my $gene (split(/\|/,$genenames)) {
     my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$chrom}}[0..2];	
     my $cscoreopres;
@@ -638,19 +637,29 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
     } else {
       $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, $genestart,min($genestop,$stop), "", $topn); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
     }
-    if ($ops eq 'ALL') {
-      push @truncationscores,$cscoreopres->[0] unless $cscoreopres->[0] == -1;
-      push @truncationscoressum,$cscoreopres->[1] unless $cscoreopres->[1] == -1;
-      push @truncationscorestop,$cscoreopres->[1] unless $cscoreopres->[2] == -1;
-    } else {
-      push @truncationscores,$cscoreopres unless $cscoreopres == -1;
+    foreach my $op (keys %operations) {
+      push @{$truncationscores{$op}}, $cscoreopres->[$operations{$op}];
     }
+#    if ($ops eq 'ALL') {
+#      push @truncationscores,$cscoreopres->[0] unless $cscoreopres->[0] == -1;
+#      push @truncationscoressum,$cscoreopres->[1] unless $cscoreopres->[1] == -1;
+#      push @truncationscorestop,$cscoreopres->[1] unless $cscoreopres->[2] == -1;
+#    } else {
+#      push @truncationscores,$cscoreopres unless $cscoreopres == -1;
+#    }
   }
-  if (@truncationscores) {
-    return ($ops eq 'ALL' ? [max(@truncationscores), max(@truncationscoressum), max(@truncationscorestop)] : [max(@truncationscores)]);
-  } else {
-    return "";
+  
+  my $res = [];
+  foreach my $op (sort {$operations{$a} <=> $operations{$b}} keys %truncationscores) {
+    push @{$res}, max(@{$truncationscores{$op}});
   }
+
+  return $res;
+#  if (@truncationscores) {
+#    return ($ops eq 'ALL' ? [max(@truncationscores), max(@truncationscoressum), max(@truncationscorestop)] : [max(@truncationscores)]);
+#  } else {
+#    return "";
+#  }
 }
 
 sub main::HELP_MESSAGE() {
