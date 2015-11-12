@@ -41,8 +41,6 @@ $genestrandcolumn = 5 && warn "Gene strand column provided without nonstandard g
 $genestrandcolumn = 5 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene strand column (5)" if $genestrandcolumn <= 3;
 die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==$genestrandcolumn;
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
-#my $exonanncolumn = (defined $options{'n'} && defined $options{'e'} ? $options{'n'} : (defined $options{'e'} ? 4 : 5));
-#warn "Exon annotation column provided without nonstandard exon annotation file - defaulting to standard exon annotation column (5)" if defined $options{'n'} && !defined $options{'e'};
 $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
 my $ops = (defined $options{'o'} ? $options{'o'} : 'ALL');
 my $topn = (defined $options{'t'} ? $options{'t'} : 100);
@@ -158,13 +156,10 @@ if (defined $ARGV[0]) {
   $time = gettimeofday();
   $preprocessedfile = "svscoretmp/$prefix.preprocess$time.bedpe";
   $sortedfile = "svscoretmp/$prefix.sort$time.vcf.gz";
-  #$annfile = "svscoretmp/$prefix.ann$time.bedpe";
-#  $headerfile = "svscoretmp/${prefix}header$time";
   my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | vcftobedpe > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi"; #; grep '^#' $preprocessedfile > $headerfile"; # Sort, annotate, convert to BEDPE, grab header
   print STDERR "Preprocessing command: $preprocess\n" if $debug;
   if (system($preprocess)) {
     unless ($debug) {
-#      unlink $headerfile;
       unlink $preprocessedfile;
       rmdir "svscoretmp";
     }
@@ -222,7 +217,6 @@ if (defined $ARGV[0]) {
       push @newheader, "##INFO=<ID=SVSCOREMEAN_RTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of right breakend to end of truncated gene\">\n";
     }
     push @newheader, @oldheader;
-#  open(HEADER, "> $headerfile") || die "Could not open $headerfile: $!";
     foreach (@newheader) {
       print OUT;
     }
@@ -232,16 +226,6 @@ if (defined $ARGV[0]) {
     }
   }
 
-  # Create and execute second preprocessing command
-#  my $preprocess2 = "grep -v '^#' $annfile | sort -k 3,3 | cat $headerfile - > $preprocessedfile; rm -f $headerfile"; # Sort by ID, add new header, clean up
-#  print STDERR "Preprocessing command 2: $preprocess2\n" if $debug;
-#  if (system($preprocess2)) {
-#    unlink $headerfile unless $debug;
-#    unlink $annfile unless $debug;
-#    unlink $preprocessedfile unless $debug;
-#    die "Preprocessing2 failed: $!";
-#  }
-#  unlink "$annfile" || warn "Could not delete $annfile: $!" unless $debug;
 }
 
 if ($support) {
@@ -265,17 +249,14 @@ foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, st
 }
 close GENES;
 
-#my $lastbndmateid = "";
 print STDERR "Entering loop\n" if $debug;
 while (my $inputline = <IN>) {
   if ($inputline =~ /^#/) {
-#    print OUT $inputline;
     next;
   }
   # Parse line
   my @splitline = split(/\s+/,$inputline);
   my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $svtype, $info_a, $info_b) = @splitline[0..6, 10, 12, 13];
-#  my ($mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,@cipos,@ciend,$mateoutputline,@splitmateline,$mateinfo,$mateline);
 
   $svtype = substr($svtype, 0, 3);
   unless (exists $types{$svtype}) {
@@ -297,64 +278,8 @@ while (my $inputline = <IN>) {
   
   my ($leftintrons,$rightintrons) = getfields($info_a,"left_Intron","right_Intron") if $svtype eq 'INV';
 
-
-#  if ($svtype eq 'BND') {
-#    my ($mateid) = ($id =~ /^(\d+)_(?:1|2)/);
-#    $mateid = $id unless $mateid;
-#    my ($nextmateid) = ($i == $#inputlines ? ("") : ((split(/\s+/,$inputlines[$i+1]))[2] =~ /^(\d+)_(?:1|2)/)); # $nextmateid is set to the mateid of the next line, unless the current line is the final line in the file. In this case, $nextmateid is set to the empty string because we know it's not the first mate of a consecutive pair
-#    my $firstmate = ($nextmateid && $mateid == $nextmateid); # First mate of a consecutive pair
-#    my $secondmate = ($lastbndmateid && $mateid == $lastbndmateid); # Second mate of a consecutive pair
-#    $singletonbnd = !($firstmate || $secondmate);
-#    if ($secondmate || $singletonbnd) { # Is this the second mate of this BND seen or a singleton BND? If the second of a pair, get annotations for first mate. If a singleton, get rid of one set of annotations
-#      $lastbndmateid = "";
-#      if ($singletonbnd) { # Make sure CIEND is present - otherwise, skip line and print error
-#	warn "Could not process variant $id because mate is absent and no CIEND field was found" && next unless $ciend;
-#      } else { # Get mateinfo
-#	my $mateline = $inputlines[$i-1];
-#	@splitmateline = split(/\s+/,$mateline);
-#	$mateinfo = $splitmateline[7];
-#      }
-#      if ($info =~ /SECONDARY/) { # Current line is secondary (right), so mate is primary (left)
-#	($leftexongenenames, $leftgenenames, $leftintrons) = ($singletonbnd ? ("","","") : getfields($mateinfo,"ExonGeneNames","Gene","Intron")); # Get mate annotations
-#	($ciend, $probright) = getfields($mateinfo, "CIPOS", "PRPOS") unless $singletonbnd; # Overwrite (possibly empty) ciend with mate's CIPOS and get mate's PRPOS if exists
-#	($rightchrom, $rightpos) = ($leftchrom, $leftpos);
-#	($leftchrom,$leftpos) = ($alt =~ /([\w.]+):(\d+)/);
-#	($cipos, $ciend) = ($ciend, $cipos); # Switch $cipos and $ciend
-#	($probleft, $probright) = ($probright, $probleft);
-#      } else { # Current line is primary (left), so mate is secondary (right)
-#	($rightexongenenames, $rightgenenames, $rightintrons) = ($singletonbnd ? ("","","") : getfields($mateinfo,"ExonGeneNames","Gene","Intron")); # Get mate annotations
-#	($ciend, $probright) = getfields($mateinfo, "CIPOS", "PRPOS") unless $singletonbnd; # Overwrite (possibly empty) ciend with mate's CIPOS and get mate's PRPOS if exists
-#	($rightchrom,$rightpos) = ($alt =~ /([\w.]+):(\d+)/); # Get right breakend coordinates if standard BND
-#	unless ($rightchrom && $rightpos) { # Get right breakend coordinates if reclassified BND
-#	  $rightchrom = $leftchrom;
-#	  $rightpos = getfields($info, "END");
-#	}
-#      }
-#      undef $mateline unless $singletonbnd;
-#    } else { # Must be the first mate of a consecutive pair
-#      $lastbndmateid = $mateid;
-#      ($leftchrom, $leftpos, $id, $alt, $info,$mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,$svtype,$spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames,@leftgenenames,@rightgenenames,$leftintrons,$rightintrons) = (); ## Get rid of old variables
-#      next;
-#    }
-#  } else { # Reset $lastbndmateid if variant isn't a BND
-#    $lastbndmateid = "";
-#    $singletonbnd = 0;
-#  }
-
   my @probleft = split(/,/,$probleft) if $probleft;
   my @probright = split(/,/,$probright) if $probright;
-
-  # Calculate start/stop coordinates from POS and CI
-#  unless ($svtype eq "BND") {
-#    $rightchrom = $leftchrom;
-#    $rightpos = getfields($info,"END");
-#  }
-#  @cipos = split(/,/,$cipos);
-#  $leftstart = $leftpos + $cipos[0];
-#  $leftstop = $leftpos + $cipos[1];
-#  @ciend = split(/,/,$ciend);
-#  $rightstart = $rightpos + $ciend[0];
-#  $rightstop = $rightpos + $ciend[1];
 
   my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
@@ -383,72 +308,6 @@ while (my $inputline = <IN>) {
     }
   }
 
-  # Calculate maximum C score depending on SV type
-#  if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV" || $svtype eq "MEI") {
-#    my $spanscore;
-#    if ($rightstop - $leftstart > 1000000) {
-#      $spanscore = ($ops eq "ALL" ? [100, 100, 100] : 100);
-#    } else {
-#      $spanscore = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart, $rightstop, "");
-#    }
-#    $leftscore = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft);
-#    $rightscore = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright);
-#    $info .= ($ops eq "ALL" ? ";SVSCOREMAX_SPAN=$spanscore->[0];SVSCOREMAX_LEFT=$leftscore->[0];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_SPAN=$spanscore->[1];SVSCORESUM_LEFT=$leftscore->[1];SVSCORESUM_RIGHT=$rightscore->[1];SVSCORETOP${topn}_SPAN=$spanscore->[2];SVSCORETOP${topn}_LEFT=$leftscore->[2];SVSCORETOP${topn}_RIGHT=$rightscore->[2]" : ";SVSCORE${ops}_SPAN=$spanscore;SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore");
-#    undef $spanscore;
-#  } elsif ($svtype eq "INV" || $svtype eq "BND") {
-#    $leftscore = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft);
-#    $rightscore = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright);
-#    my ($sameintrons,@lefttruncationscores,@lefttruncationscoressum,@lefttruncationscorestop,@righttruncationscores,@righttruncationscoressum,@righttruncationscorestop,$lefttruncationscore,$righttruncationscore,%leftintrons,@rightintrons) = ();
-#    unless ($singletonbnd) {
-#      %leftintrons = map {$_ => 1} (split(/\|/,$leftintrons));
-#      @rightintrons = split(/\|/,$rightintrons);
-#      ## At worst, $leftintrons and $rightintrons are lists of introns. The only case in which the gene is not disrupted is if both lists are equal and nonempty, meaning that in every gene hit by this variant, both ends of the variant are confined to the same intron
-#      $sameintrons = scalar (grep {$leftintrons{$_}} @rightintrons) == scalar @rightintrons && scalar @rightintrons > 0;
-#    }
-#    if (($leftgenenames || $rightgenenames) && ($singletonbnd || !$sameintrons)) { # Gene is being truncated - left or right breakend hits a gene, and the breakends are not confined to the same introns (or, if the variant is a singleton BND, this latter condition is not necessary)
-#      foreach my $gene (split(/\|/,$leftgenenames)) {
-#	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$leftchrom}}[0..2];	
-#	my $cscoreopres;
-#	if ($genestrand eq '+') {
-#	  $cscoreopres = cscoreop($caddfile, "", $ops, $leftchrom, max($genestart,$leftstart),$genestop, ""); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
-#	} else {
-#	  $cscoreopres = cscoreop($caddfile, "", $ops, $leftchrom, $genestart,min($genestop,$leftstop), ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
-#	}
-#	if ($ops eq 'ALL') {
-#	  push @lefttruncationscores,$cscoreopres->[0] unless $cscoreopres->[0] == -1;
-#	  push @lefttruncationscoressum,$cscoreopres->[1] unless $cscoreopres->[1] == -1;
-#	  push @lefttruncationscorestop,$cscoreopres->[1] unless $cscoreopres->[2] == -1;
-#	} else {
-#	  push @lefttruncationscores,$cscoreopres unless $cscoreopres == -1;
-#	}
-#      }
-#      $lefttruncationscore = ($ops eq 'ALL' ? [max(@lefttruncationscores), max(@lefttruncationscoressum), max(@lefttruncationscorestop)] : max(@lefttruncationscores)) if @lefttruncationscores;
-#      foreach my $gene (split(/\|/,$rightgenenames)) {
-#	my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$rightchrom}}[0..2];	
-#	my $cscoreopres;
-#	if ($genestrand eq '+') {
-#	  $cscoreopres = cscoreop($caddfile, "", $ops, $rightchrom, max($genestart,$rightstart),$genestop, ""); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
-#	} else {
-#	  $cscoreopres = cscoreop($caddfile, "", $ops, $rightchrom, $genestart,min($genestop,$rightstop), ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further right (this is technically backwards, but it doesn't matter for the purposes of finding a maximum C score)
-#	}
-#	if ($ops eq 'ALL') {
-#	  push @righttruncationscores,$cscoreopres->[0] unless $cscoreopres->[0] == -1;
-#	  push @righttruncationscoressum,$cscoreopres->[1] unless $cscoreopres->[1] == -1;
-#	  push @righttruncationscorestop,$cscoreopres->[1] unless $cscoreopres->[2] == -1;
-#	} else {
-#	  push @righttruncationscores,$cscoreopres unless $cscoreopres == -1;
-#	}
-#      }
-#      $righttruncationscore = ($ops eq 'ALL' ? [max(@righttruncationscores), max(@righttruncationscoressum), max(@righttruncationscorestop)] : max(@righttruncationscores)) if @righttruncationscores;
-#    }
-# }
-#    ($sameintrons, %leftintrons,@rightintrons) = (); # Get rid of old variables
-
-# Transpose %scores hash to make taking maxes easy
-#  foreach my $x (@{$scores{$interval}}) { ## DEBUG
-#    print "$x ";
-#  }
-
   my %scoresbyop = ();
   foreach my $interval (sort {$intervals{$a} <=> $intervals{$b}} keys %scores) { # LEFT, RIGHT, (SPAN, LTRUNC, RTRUNC)
     foreach my $op (keys %operations) { # MAX, SUM, TOP$topn, MEAN
@@ -469,67 +328,12 @@ while (my $inputline = <IN>) {
     }
   }
 
-
-#  my $addtoinfo;
-#    if ($ops eq "ALL") {
-#      $addtoinfo = ";SVSCOREMAX_LEFT=$leftscore->[0];SVSCOREMAX_RIGHT=$rightscore->[0];SVSCORESUM_LEFT=$leftscore->[1];SVSCORESUM_RIGHT=$rightscore->[1];SVSCORETOP${topn}_LEFT=$leftscore->[2];SVSCORETOP${topn}_RIGHT=$rightscore->[2]" . (defined $lefttruncationscore ? ";SVSCOREMAX_LTRUNC=$lefttruncationscore->[0];SVSCORESUM_LTRUNC=$lefttruncationscore->[1];SVSCORETOP${topn}_LTRUNC=$lefttruncationscore->[2]" : "") . (defined $righttruncationscore ? ";SVSCOREMAX_RTRUNC=$righttruncationscore->[0];SVSCORESUM_RTRUNC=$righttruncationscore->[1];SVSCORETOP${topn}_RTRUNC=$righttruncationscore->[2]" : "");
-#    } else {
-#      $addtoinfo = ";SVSCORE${ops}_LEFT=$leftscore;SVSCORE${ops}_RIGHT=$rightscore" . (defined $lefttruncationscore ? ";SVSCORE${ops}_LTRUNC=$lefttruncationscore" : "") . (defined $righttruncationscore ? ";SVSCORE${ops}_RTRUNC=$righttruncationscore" : "");
-#    }
-#    $info .= $addtoinfo;
-#    $mateinfo .= $addtoinfo if $svtype eq "BND" && !$singletonbnd;
-#    (@lefttruncationscores,@righttruncationscores,@lefttruncationscoressum,@righttruncationscoressum,$lefttruncationscore,$righttruncationscore,$addtoinfo) = (); # Get rid of old variables
-  
-
-  # Multiplier for deletions and duplications which hit an exon, lower multiplier if one of these hits a gene but not an exon. Purposely not done for BND and INV. THESE WILL NEED TO BE PLACED IN ABOVE IF STATEMENT IN THE FUTURE
-  #if ($spanexongenenames && ($svtype eq "DEL" || $svtype eq "DUP")) { 
-  #  $spanscore *= 1.5;
-  #} elsif($spangenenames && ($svtype eq "DEL" || $svtype eq "DUP")) {
-  #  $spanscore *= 1.2;
-  #}
-
-  # For all types except INS, multiply left and right scores respectively if exon/gene is hit
-  #if ($leftexongenenames && $svtype ne "INS") {
-  #  $leftscore *= 1.5;
-  #} elsif ($leftgenenames && $svtype ne "INS") {
-  #  $leftscore *= 1.2;
-  #}
-  #if ($rightexongenenames && $svtype ne "INS") {
-  #  $rightscore *= 1.5;
-  #} elsif ($rightgenenames && $svtype ne "INS") {
-  #  $rightscore *= 1.2;
-  #}
-
-#  my $outputline = "";
-#  $mateoutputline = "" if $svtype eq "BND" && !$singletonbnd;
-#  foreach my $i (0..$#splitline) { # Build output line
-#    $outputline .= (($i == 7 ? $info : $splitline[$i]) . ($i < $#splitline ? "\t" : ""));
-#    $mateoutputline .= (($i == 7 ? $mateinfo : $splitmateline[$i]) . ($i < $#splitline ? "\t" : "")) if $svtype eq "BND" && !$singletonbnd;
-#  }
   $splitline[12] = $info_a;
   $splitline[13] = $info_b;
   print OUT join("\t",@splitline) . "\n";
-#  push @outputlines, $mateoutputline if $svtype eq "BND" && !$singletonbnd;
-
-#  ($leftchrom, $leftpos, $id, $alt, $info,$mateid,$rightchrom,$rightpos,$rightstart,$rightstop,$leftstart,$leftstop,$svtype,$spanexongenenames,$spangenenames,$leftexongenenames,$leftgenenames,$rightexongenenames,$rightgenenames,@leftgenenames,@rightgenenames,$leftintrons,$rightintrons,$rightchrom,$rightpos,$leftscore,$rightscore,$cipos,$ciend,@cipos,@ciend,$leftscore,$rightscore,$outputline,$mateoutputline,@splitmateline,$mateline,$mateinfo) = (); # Get rid of old variables
 
   print STDERR $.,", " if $debug;
 }
-
-# Extract chromosomes and starting positions for sorting 
-#my @chroms;
-#foreach my $line (@outputlines) {
-#  push @chroms, (split(/\s+/,$line))[0];
-#}
-#my @starts;
-#foreach my $line (@outputlines) {
-#  push @starts, (split(/\s+/,$line))[1];
-#}
-#
-# Sort and print
-#foreach my $i (sort {$chroms[$a] cmp $chroms[$b] || $starts[$a] <=> $starts[$b]} (0..$#outputlines)) {
-#  print "$outputlines[$i]\n";
-#}
 
 close IN;
 close OUT;
@@ -571,10 +375,6 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist, $topn) = @_;
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
-#  if ($stop-$start>1000000) {## DEBUG
-#    return ($ops eq 'ALL' ? [-1, -1, -1 -1] : [-1]) if ($stop-$start>1000000); # Short circuit if region is too big - this is usually caused by faulty annotations
-#    print STDERR "Interval too big: $chrom:$start-$stop\n";
-#  }
   my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
   my @tabixoutputlines = split(/\n/,$tabixoutput);
   return ($ops eq 'ALL' ? [-1, -1, -1, -1] : [-1]) unless @tabixoutputlines; # Short circuit if interval has no C scores
@@ -640,13 +440,6 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
     foreach my $op (keys %operations) {
       push @{$truncationscores{$op}}, $cscoreopres->[$operations{$op}];
     }
-#    if ($ops eq 'ALL') {
-#      push @truncationscores,$cscoreopres->[0] unless $cscoreopres->[0] == -1;
-#      push @truncationscoressum,$cscoreopres->[1] unless $cscoreopres->[1] == -1;
-#      push @truncationscorestop,$cscoreopres->[1] unless $cscoreopres->[2] == -1;
-#    } else {
-#      push @truncationscores,$cscoreopres unless $cscoreopres == -1;
-#    }
   }
   
   my $res = [];
@@ -655,11 +448,6 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
   }
 
   return $res;
-#  if (@truncationscores) {
-#    return ($ops eq 'ALL' ? [max(@truncationscores), max(@truncationscoressum), max(@truncationscorestop)] : [max(@truncationscores)]);
-#  } else {
-#    return "";
-#  }
 }
 
 sub main::HELP_MESSAGE() {
@@ -679,8 +467,6 @@ sub main::HELP_MESSAGE() {
     --help    Display this message
     --version Display version\n"
 }
-
-#    -n	      Column number for annotation in exon BED file to be added to VCF (4 if using -e, 5 otherwise)
 
 sub main::VERSION_MESSAGE() {
   print "SVScore version $main::VERSION\n";
