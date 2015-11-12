@@ -1,12 +1,18 @@
-## 0.4 (Under development)
- * Fixed major bug in automatic download of RefSeq annotations
- * Implemented -o TOPn option
- * Added support for CNV and MEI variants (treated as DELs/DUPs)
+## 0.4 (11/12/15)
+ * Account for regions of the genome which do not have CADD scores
+ * Use vcfanno 0.0.8
+ * Fixed sorting incompatibilities with vcfanno
+ * Implemented -o TOP (mean of top n bases) and -o MEAN options
+ * Added -t (number of bases to use in -o top), -p (gene file strand column), and -v (verbose) options
+ * Removed exon annotation and -n (SVScore still requires an exon file to create intron file)
+ * Added support for CNV and MEI variant types (treated as DELs/DUPs)
+ * Replaced BND with TRX, BNDs still supported but only left/right breakend scores are calculated
+ * Updated added header lines
  * Temporary files go in svscoretmp directory, which is deleted automatically (except under -d)
+ * Made introns.bed filename more descriptive to avoid problems in switching between annotation systems in the same directory
  * Improved performance by returning a score of -1 for regions which are too big (above 1 Mb)
  * Added unit test
  * Allow for calculation of scores for variants reclassified to BND without changing the ALT field
-
 
 ## 0.3 (08/17/15)
  * Performance improvement (fixed high memory usage bug)
