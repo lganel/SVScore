@@ -1,4 +1,4 @@
-## 0.4 (Under development)
+## 0.4 (11/12/15)
  * Account for regions of the genome which do not have CADD scores
  * Use vcfanno 0.0.8
  * Fixed sorting incompatibilities with vcfanno
