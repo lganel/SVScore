@@ -32,7 +32,7 @@ my $verbose = defined $options{'v'};
 
 my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
 die "Could not find $caddfile" unless -s $caddfile;
-my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed');
+my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed.gz');
 my $geneanncolumn = (defined $options{'m'} && defined $options{'g'} ? $options{'m'} : 4);
 $geneanncolumn = 4 && warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation column (4)" if defined $options{'m'} && !defined $options{'g'};
 $geneanncolumn = 4 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)" if $geneanncolumn <= 2;
@@ -51,29 +51,30 @@ if ($ops eq 'ALL' || $ops eq 'TOP') {
   delete $operations{"TOP"};
 }
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
-my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $compressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
+my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
 
 ##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
-  print STDERR "Generating exon file\n" if $debug;
+  print STDERR "Generating exon file: $exonfile\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -k 1,1V -k 2,2n | uniq > refGene.exons.b37.bed");
 } elsif ($exonfile ne 'refGene.exons.b37.bed' && !-s $exonfile) {
   die "$exonfile not found or empty!";
 }
 
-if ($genefile eq 'refGene.genes.b37.bed' && !-s $genefile) { # Generate gene file if necessary
-  print STDERR "Generating gene file\n" if $debug;
-  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$13,\$4}' OFS=\"\\t\" | sort -k 1,1V -k 2,2n | uniq > refGene.genes.b37.bed");
-} elsif ($genefile ne 'refGene.genes.b37.bed' && !-s $genefile) {
+my $intronfile = "introns.$genefile.$exonfile.bed.gz";
+if ($genefile eq 'refGene.genes.b37.bed.gz' && !-s $genefile && !-s $intronfile) { # Generate gene file if necessary
+  print STDERR "Generating gene file: $genefile\n" if $debug;
+  system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$13,\$4}' OFS=\"\\t\" | sort -k 1,1V -k 2,2n | uniq | bgzip -c > refGene.genes.b37.bed.gz");
+} elsif ($genefile ne 'refGene.genes.b37.bed.gz' && !-s $genefile) {
   die "$genefile not found or empty!";
 }
 
 # Zip/unzip annotation files as necessary
 if ($genefile =~ /\.gz/) {
   $compressedgenefile = $genefile;
-  $uncompressedgenefile = ($genefile =~ /(.*)\.gz$/);
+  ($uncompressedgenefile) = ($genefile =~ /(.*)\.gz$/);
   unless (-s $uncompressedgenefile) {
     $alteredgenefile = 1;
     print STDERR "Unzipping $genefile\n" if $debug;
@@ -94,8 +95,7 @@ if ($genefile =~ /\.gz/) {
 }
 
 if ($exonfile =~ /\.gz/) {
-  $compressedexonfile = $exonfile;
-  $uncompressedexonfile = ($exonfile =~ /(.*)\.gz$/);
+  ($uncompressedexonfile) = ($exonfile =~ /(.*)\.gz$/);
   unless (-s $uncompressedexonfile) {
     $alteredexonfile = 1;
     print STDERR "Unzipping $exonfile\n" if $debug;
@@ -105,19 +105,10 @@ if ($exonfile =~ /\.gz/) {
   }
 } else {
   $uncompressedexonfile = $exonfile;
-  $compressedexonfile = "$exonfile.gz";
-  unless(-s $compressedexonfile) {
-    $alteredexonfile = 1;
-    print STDERR "Zipping $exonfile\n" if $debug;
-    if (system("bgzip -c $exonfile > $compressedexonfile")) {
-      die "Compressing $exonfile failed: $!";
-    }
-  }
 }
 
 mkdir "svscoretmp" unless -d "svscoretmp";
 
-my $intronfile = "introns.$genefile.$exonfile.bed.gz";
 unless (-s "$intronfile") { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming intron file has no header line) and sort
   print STDERR "Generating intron file\n" if $debug;
   system("bedtools subtract -a $uncompressedgenefile -b $uncompressedexonfile | sort -u -k1,1V -k2,2n | awk '{print \$0 \"\t\" NR}' | bgzip -c > $intronfile");
@@ -131,9 +122,9 @@ unless (-s "$intronfile.tbi") {
   }
 }
 unless (-s "$compressedgenefile.tbi") {
-  print STDERR "Tabix indexing $genefile\n" if $debug;
-  if(system("tabix -p bed $genefile")) {
-    die "Tabix failed on $genefile";
+  print STDERR "Tabix indexing $compressedgenefile\n" if $debug;
+  if(system("tabix -p bed $compressedgenefile")) {
+    die "Tabix failed on $compressedgenefile";
   }
 }
 
@@ -361,8 +352,6 @@ unless ($debug) {
   if ($alteredexonfile) {
     if ($exonfile =~ /\.gz$/) {
       unlink $uncompressedexonfile;
-    } else {
-      unlink $compressedexonfile;
     }
   }
 

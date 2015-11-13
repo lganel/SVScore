@@ -26,7 +26,7 @@ usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-p 
 
 * Perl v5.8.7 or later
 
-* [vcfanno](https://www.github.com/brentp/vcfanno) v0.0.7
+* [vcfanno](https://www.github.com/brentp/vcfanno) v0.0.8
 
 * [bedtools](https://www.github.com/arq5x/bedtools2)
 
