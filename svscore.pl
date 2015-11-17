@@ -145,8 +145,8 @@ if (defined $ARGV[0]) {
 
   # Tag intermediate files with timestamp to avoid collisions
   $time = gettimeofday();
-  $preprocessedfile = "svscoretmp/$prefix.preprocess$time.bedpe";
-  $sortedfile = "svscoretmp/$prefix.sort$time.vcf.gz";
+  $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
+  $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
   my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | vcftobedpe > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi"; #; grep '^#' $preprocessedfile > $headerfile"; # Sort, annotate, convert to BEDPE, grab header
   print STDERR "Preprocessing command: $preprocess\n" if $debug;
   if (system($preprocess)) {

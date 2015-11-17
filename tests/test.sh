@@ -7,7 +7,7 @@ fi
 
 grep -v "^#" NA12878.sv.svscore.vcf > NA12878.sv.svscore.noheader.vcf
 
-../svscore.pl -dc $1 NA12878.sv.vcf | grep -v "^#" > NA12878.sv.svscore.test.noheader.vcf
+../svscore.pl -dvc $1 NA12878.sv.vcf | grep -v "^#" > NA12878.sv.svscore.test.noheader.vcf
 
 echo
 
@@ -21,4 +21,4 @@ else
 fi
 
 rm -rf svscoretmp/
-rm -f refGene.exons.b37.bed refGene.genes.b37.bed introns.bed conf.toml NA12878.sv.svscore.noheader.vcf NA12878.sv.svscore.test.noheader.vcf
+rm -f refGene.exons.b37.bed refGene.genes.b37.bed* introns.refGene.genes.b37.bed.gz.refGene.exons.b37.bed.bed.gz* conf.toml NA12878.sv.svscore.noheader.vcf NA12878.sv.svscore.test.noheader.vcf
