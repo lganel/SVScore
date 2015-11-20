@@ -147,9 +147,9 @@ if (defined $ARGV[0]) {
   $time = gettimeofday();
   $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
   $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
-  my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | vcftobedpe > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi"; #; grep '^#' $preprocessedfile > $headerfile"; # Sort, annotate, convert to BEDPE, grab header
-  print STDERR "Preprocessing command: $preprocess\n" if $debug;
-  if (system($preprocess)) {
+  my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | ./reorderheader.pl stdin $ARGV[0] | vcftobedpe > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi"; #; grep '^#' $preprocessedfile > $headerfile"; # Sort, annotate, convert to BEDPE, grab header
+  print STDERR "Preprocessing command: $preprocess\n\n" if $debug;
+  if (system($preprocess) || -z $preprocessedfile) {
     unless ($debug) {
       unlink $preprocessedfile;
       rmdir "svscoretmp";
@@ -440,7 +440,7 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
 }
 
 sub main::HELP_MESSAGE() {
-  print "usage: ./svscore.pl [-dsvw] [-o op] [-t topnumber] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] vcf
+  print STDERR "usage: ./svscore.pl [-dsvw] [-o op] [-t topnumber] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] vcf
     -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -s	      Create/download supporting files and quit
     -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
