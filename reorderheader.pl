@@ -23,15 +23,15 @@ if($reffile eq "stdin") {
 } else {
   open($reffilehandle,"<$reffile") || die "Could not open $reffile: $!";
 }
-my $fileinput = ($file eq "stdin" ? "STDIN" : $file);
 
 my (%reforder, $line) = ();
 my $count = 0;
-until(($line = <$reffilehandle>) =~ /^#CHROM/) {
+until(!defined($line = <$reffilehandle>) || $line =~ /^#CHROM/) {
   $reforder{$line} = $count;
   $count++;
 }
 close $reffilehandle;
+die "Malformed VCF" unless defined $line;
 
 if($file eq "stdin") {
   $filehandle=*STDIN;

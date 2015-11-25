@@ -146,10 +146,17 @@ if (defined $ARGV[0]) {
   # Tag intermediate files with timestamp to avoid collisions
   $time = gettimeofday();
   $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
-  $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
-  my $preprocess = ($compressed ? "z": "") . "cat $ARGV[0] | awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | ./reorderheader.pl stdin $ARGV[0] | vcftobedpe > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi"; #; grep '^#' $preprocessedfile > $headerfile"; # Sort, annotate, convert to BEDPE, grab header
-  print STDERR "Preprocessing command: $preprocess\n\n" if $debug;
-  if (system($preprocess) || -z $preprocessedfile) {
+  my $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
+  my $reorderout = "svscoretmp/$prefix$time.reorderheaderout.vcf";
+  my $inputfile = $ARGV[0];
+  if ($compressed) {
+    $inputfile = "$prefix.vcf";
+    system("gunzip -c $ARGV[0] > $prefix.vcf") && die "Could not unzip $ARGV[0]: $!";
+  }
+  my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile > $reorderout"; # Sort, annotate, convert to BEDPE, grab header
+  my $preprocess2 = "vcftobedpe -i $reorderout > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi $reorderout";
+  print STDERR "Preprocessing commands:\n$preprocess\n$preprocess2\n" if $debug;
+  if (system($preprocess) || system($preprocess2) || -z $preprocessedfile) {
     unless ($debug) {
       unlink $preprocessedfile;
       rmdir "svscoretmp";
