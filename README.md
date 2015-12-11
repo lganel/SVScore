@@ -24,7 +24,7 @@ usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-p 
 # Dependencies
 * A Linux-like system with a Bash-like shell
 
-* Perl v5.8.7 or later
+* Perl v5.10.1 or later
 
 * [vcfanno](https://www.github.com/brentp/vcfanno) v0.0.8
 
