@@ -139,6 +139,7 @@ close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
 my ($prefix, $time);
+my $inputfile = $ARGV[0];
 if (defined $ARGV[0]) {
   print STDERR "Preparing preprocessing command\n" if $debug;
   ($prefix) = ($ARGV[0] =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
@@ -148,7 +149,6 @@ if (defined $ARGV[0]) {
   $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
   my $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
   my $reorderout = "svscoretmp/$prefix$time.reorderheaderout.vcf";
-  my $inputfile = $ARGV[0];
   if ($compressed) {
     $inputfile = "$prefix.vcf";
     system("gunzip -c $ARGV[0] > $prefix.vcf") && die "Could not unzip $ARGV[0]: $!";
@@ -283,7 +283,7 @@ while (my $inputline = <IN>) {
 
   if ($svtype eq "INS") {
     $scores{"LEFT"} = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-10, $leftstart, "", $topn);
-    $scores{"RIGHT"} = cscoreop($caddfile, "", $ops, $leftchrom, $rightend, $rightend+10, "", $topn);
+    $scores{"RIGHT"} = cscoreop($caddfile, "", $ops, $leftchrom, $rightstop, $rightstop+10, "", $topn);
   } else {
     $scores{"LEFT"} = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft, $topn);
     $scores{"RIGHT"} = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright, $topn);
@@ -376,7 +376,6 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist, $topn) = @_;
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
-  $start++;
   my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
   my @tabixoutputlines = split(/\n/,$tabixoutput);
   return ($ops eq 'ALL' ? [-1, -1, -1, -1] : [-1]) unless @tabixoutputlines; # Short circuit if interval has no C scores
