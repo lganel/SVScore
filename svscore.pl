@@ -16,7 +16,7 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt 
 $main::VERSION = '0.4';
 
 my %possibleoperations = ("MAX", 0, "SUM", 1, "TOP", 2, "MEAN", 3); # Hash of supported operations
-my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "INS", "CNV", "MEI"); # Hash of supported svtypes
+my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "INS", "CNV", "MEI", "INS"); # Hash of supported svtypes
 my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
 my %options = ();
@@ -259,7 +259,7 @@ while (my $inputline = <IN>) {
   $svtype = substr($svtype, 0, 3);
   unless (exists $types{$svtype}) {
     warn "Unrecognized SVTYPE $svtype at line ",$.," of preprocessed VCF file\n";
-    print $inputline;
+    print OUT $inputline;
     next;
   }
   my ($probleft,$probright) = getfields($info_a,"PRPOS","PREND") if $weight;
@@ -281,9 +281,13 @@ while (my $inputline = <IN>) {
 
   my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
-
-  $scores{"LEFT"} = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft, $topn);
-  $scores{"RIGHT"} = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright, $topn);
+  if ($svtype eq "INS") {
+    $scores{"LEFT"} = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-10, $leftstart, "", $topn);
+    $scores{"RIGHT"} = cscoreop($caddfile, "", $ops, $leftchrom, $rightend, $rightend+10, "", $topn);
+  } else {
+    $scores{"LEFT"} = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft, $topn);
+    $scores{"RIGHT"} = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright, $topn);
+  }
 
   if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV" || $svtype eq "MEI") {
     if ($rightstop - $leftstart > 1000000) {
@@ -293,7 +297,7 @@ while (my $inputline = <IN>) {
     }
   }
 
-  if ($svtype eq "INV" || $svtype eq "TRX") {
+  if ($svtype eq "INV" || $svtype eq "TRX" || $svtype eq "INS") {
     my %leftintrons = map {$_ => 1} (split(/\|/,$leftintrons));
     my @rightintrons = split(/\|/,$rightintrons);
     ## At worst, $leftintrons and $rightintrons are lists of introns. The only case in which the gene is not disrupted is if both lists are equal and nonempty, meaning that in every gene hit by this variant, both ends of the variant are confined to the same intron
@@ -347,6 +351,7 @@ unless ($debug) {
   unlink $preprocessedfile;
   unlink $vcfout;
   unlink $bedpeout;
+  unlink $inputfile if $compressed;
   
   if ($alteredgenefile) {
     if ($genefile =~ /\.gz$/) {
@@ -371,6 +376,7 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist, $topn) = @_;
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
+  $start++;
   my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
   my @tabixoutputlines = split(/\n/,$tabixoutput);
   return ($ops eq 'ALL' ? [-1, -1, -1, -1] : [-1]) unless @tabixoutputlines; # Short circuit if interval has no C scores
@@ -400,7 +406,6 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
     my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
     $res = [max(@scores), nearest(0.001,sum(@scores)), nearest(0.001,sum(@topn) / scalar(@topn)), nearest(0.001,sum(@scores)/scalar(@scores))];
   }
-  ($filename,$chrom,$start,$stop,$ops,$probdist,@probdist,@scores,$tabixoutput,@tabixoutputlines,$topn) = (); # Get rid of old variables
   return $res;
 }
 
@@ -411,7 +416,6 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
     my ($ann) = ($info =~ /(?:;|^)$_[$i]=(.*?)(?:;|$)/);
     push @ans, ($ann ? $ann : "");
   }
-  $info = undef; # Get rid of old variable
   if (@ans > 1) {
     return @ans;
   } else {
