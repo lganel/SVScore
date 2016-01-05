@@ -1,5 +1,5 @@
 # SVScore
-Prioritize structural variants based on annotations and C scores
+Prioritize structural variants based on CADD scores
 
 # Usage
 ```
