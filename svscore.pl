@@ -7,7 +7,7 @@
 use strict;
 use Getopt::Std;
 use List::Util qw(max min sum);
-use List::MoreUtils qw(pairwise);
+use List::MoreUtils qw(pairwise uniq);
 use Time::HiRes qw(gettimeofday);
 use Math::Round qw(nearest);
 
@@ -16,7 +16,9 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt 
 $main::VERSION = '0.4';
 
 my %possibleoperations = ("MAX", 0, "SUM", 1, "TOP", 2, "MEAN", 3); # Hash of supported operations
-my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "INS", "CNV", "MEI", "INS"); # Hash of supported svtypes
+my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "CNV", "MEI", "INS"); # Hash of supported svtypes
+my %onelinetruncationtypes = map {$_ => 1} {"INV"}; # Hash of svtypes represented on one line for which truncation scores are calculated
+my %twolinetruncationtypes = map {$_ => 1} {"TRX", "INS"}; # Hash of svtypes represented on two lines for which truncation scores are calculated
 my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
 my %options = ();
@@ -28,7 +30,7 @@ my $support = defined $options{'s'};
 my $weight = defined $options{'w'};
 my $verbose = defined $options{'v'};
 
-&main::HELP_MESSAGE() && die unless defined $ARGV[0] || $support;
+&main::HELP_MESSAGE() && die unless (defined $ARGV[0] || $support);
 
 my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
 die "Could not find $caddfile" unless -s $caddfile;
@@ -134,7 +136,7 @@ chomp $intronnumcolumn;
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
 open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
-print CONFIG "[[annotation]]\nfile=\"$compressedgenefile\"\nnames=[\"Gene\"]\ncolumns=[$geneanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\"]\ncolumns=[$intronnumcolumn]\nops=[\"uniq\"]\n";
+print CONFIG "[[annotation]]\nfile=\"$compressedgenefile\"\nnames=[\"Gene\"]\ncolumns=[$geneanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\",\"IntronGene\"]\ncolumns=[$intronnumcolumn,4]\nops=[\"uniq\",\"uniq\"]\n";
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
@@ -263,18 +265,28 @@ while (my $inputline = <IN>) {
     next;
   }
   my ($probleft,$probright) = getfields($info_a,"PRPOS","PREND") if $weight;
-  my ($leftgenenames, $rightgenenames);
-  if ($info_b eq ".") { 
+
+  # Get vcfanno annotations
+  my ($leftgenenames, $rightgenenames, $leftintrons, $rightintrons, $leftintrongenenames, $rightintrongenenames);
+  if ($info_b eq ".") { # Single line variant in VCF
     ($leftgenenames,$rightgenenames) = getfields($info_a,"left_Gene","right_Gene");
-  } else {
+    ($leftintrons,$rightintrons) = getfields($info_a,"left_Intron","right_Intron") if $onelinetruncationtypes{$svtype};
+    ($leftintrongenenames,$rightintrongenenames) = getfields($info_a,"left_IntronGene","right_IntronGene");
+  } else { # Multiline variant in VCF (possibly only one line of variant present)
     $leftgenenames = getfields($info_a,"Gene");
+    $leftintrongenenames = getfields($info_a,"IntronGene");
+    $leftintrons = getfields($info_a,"Intron") if $twolinetruncationtypes{$svtype};
+    $rightintrons = getfields($info_b,"Intron") if $twolinetruncationtypes{$svtype};
     $rightgenenames = getfields($info_b,"Gene");
+    $rightintrongenenames = getfields($info_b,"IntronGene");
   }
   my @leftgenenames = split(/\|/,$leftgenenames);
   my @rightgenenames = split(/\|/,$rightgenenames);
   my $localweight = $weight && $probleft;
   
-  my ($leftintrons,$rightintrons) = getfields($info_a,"left_Intron","right_Intron") if $svtype eq 'INV';
+  if ($svtype eq 'TRX') {
+    
+  }
 
   my @probleft = split(/,/,$probleft) if $probleft;
   my @probright = split(/,/,$probright) if $probright;
@@ -298,14 +310,32 @@ while (my $inputline = <IN>) {
   }
 
   if ($svtype eq "INV" || $svtype eq "TRX" || $svtype eq "INS") {
-    my %leftintrons = map {$_ => 1} (split(/\|/,$leftintrons));
+    my @leftintrons = split(/\|/,$leftintrons);
+    my @leftintrongenenames = split(/\|/,$leftintrongenenames);
     my @rightintrons = split(/\|/,$rightintrons);
+    my @rightintrongenenames = split(/\|/,$rightintrongenenames);
+    my %leftintrons = map {$leftintrons[$_] => $leftintrongenenames[$_]} (0..$#leftintrons); # @leftintrons and @leftintrongenes should have the same number of elements if vcfanno is working as it should ## PICK UP HERE - cancel out introns present in both, then concatenate values() of both hashes
+    my %rightintrons = map {$rightintrons[$_] => $rightintrongenenames[$_]} (0..$#rightintrons);
+    foreach my $intron (keys %leftintrons) {
+      if (exists $rightintrons{$intron}) {
+	delete $rightintrons{$intron};
+	delete $leftintrons{$intron};
+      }
+    }
+    @leftintrongenenames = uniq(values(%leftintrons));
+    @rightintrongenenames = uniq(values(%rightintrons));
+#    my %leftintrons = map {$_ => 1} (split(/\|/,$leftintrons));
+#    my @rightintrons = split(/\|/,$rightintrons);
+
     ## At worst, $leftintrons and $rightintrons are lists of introns. The only case in which the gene is not disrupted is if both lists are equal and nonempty, meaning that in every gene hit by this variant, both ends of the variant are confined to the same intron
-    my $sameintrons = scalar (grep {$leftintrons{$_}} @rightintrons) == scalar @rightintrons && scalar @rightintrons > 0;
-    unless ($sameintrons) {
-      my $leftscore = truncationscore($leftchrom, $leftstart, $leftstop, $leftgenenames, \%genes, $caddfile, $ops, $topn, \%operations);
+#    my $sameintrons = scalar (grep {$leftintrons{$_}} @rightintrons) == scalar @rightintrons && scalar @rightintrons > 0;
+#    unless ($sameintrons) {
+    if (@leftintrongenenames) {
+      my $leftscore = truncationscore($leftchrom, $leftstart, $leftstop, \@leftintrongenenames, \%genes, $caddfile, $ops, $topn, \%operations);
       $scores{"LTRUNC"} = $leftscore if $leftscore;
-      my $rightscore = truncationscore($rightchrom, $rightstart, $rightstop, $rightgenenames, \%genes, $caddfile, $ops, $topn, \%operations);
+    }
+    if (@rightintrongenenames) {
+      my $rightscore = truncationscore($rightchrom, $rightstart, $rightstop, \@rightintrongenenames, \%genes, $caddfile, $ops, $topn, \%operations);
       $scores{"RTRUNC"} = $rightscore if $rightscore;
     }
   }
@@ -325,7 +355,7 @@ while (my $inputline = <IN>) {
     if ($verbose) {
       foreach my $interval (keys %scores) {
 	$info_a .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless $info_a eq "MISSING";
-	$info_b .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless $info_b eq "." || $info_b eq "MISSING";
+	$info_b .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless ($info_b eq "." || $info_b eq "MISSING");
       }
     }
   }
@@ -423,12 +453,13 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
 }
 
 sub truncationscore { # Calculate truncation score based on the coordinates of a given breakend and the names of the genes it hits
-  my ($chrom, $start, $stop, $genenames, $genesref, $caddfile, $ops, $topn, $operationsref) = @_;
-  return "" unless $genenames;
+  my ($chrom, $start, $stop, $introngenesref, $genesref, $caddfile, $ops, $topn, $operationsref) = @_;
+  my @introngenes = @{$introngenesref};
+  return "" unless @introngenes;
   my %operations = %{$operationsref};
   my %genes = %{$genesref};
   my %truncationscores;
-  foreach my $gene (split(/\|/,$genenames)) {
+  foreach my $gene (@introngenes) {
     my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$chrom}}[0..2];	
     my $cscoreopres;
     if ($genestrand eq '+') {
