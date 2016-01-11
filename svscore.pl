@@ -17,8 +17,9 @@ $main::VERSION = '0.4';
 
 my %possibleoperations = ("MAX", 0, "SUM", 1, "TOP", 2, "MEAN", 3); # Hash of supported operations
 my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "CNV", "MEI", "INS"); # Hash of supported svtypes
-my %onelinetruncationtypes = map {$_ => 1} {"INV"}; # Hash of svtypes represented on one line for which truncation scores are calculated
-my %twolinetruncationtypes = map {$_ => 1} {"TRX", "INS"}; # Hash of svtypes represented on two lines for which truncation scores are calculated
+#my %onelinetruncationtypes = map {$_ => 1} ("INV"); # Hash of svtypes represented on one line for which truncation scores are calculated
+#my %twolinetruncationtypes = map {$_ => 1} ("TRX", "INS"); # Hash of svtypes represented on two lines for which truncation scores are calculated
+my %truncationtypes = ("INV","TRX","INS","DEL"); # All svtypes for which truncation scores are calculated
 my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
 my %options = ();
@@ -37,7 +38,7 @@ die "Could not find $caddfile" unless -s $caddfile;
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed.gz');
 my $geneanncolumn = (defined $options{'m'} && defined $options{'g'} ? $options{'m'} : 4);
 $geneanncolumn = 4 && warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation column (4)" if defined $options{'m'} && !defined $options{'g'};
-$geneanncolumn = 4 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)" if $geneanncolumn <= 2;
+$geneanncolumn = 4 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)" if $geneanncolumn <= 3;
 my $genestrandcolumn = (defined $options{'p'} ? $options{'p'} : 5);
 $genestrandcolumn = 5 && warn "Gene strand column provided without nonstandard gene annotation file - defaulting to standard gene strand column (5)" if defined $options{'m'} && !defined $options{'g'};
 $genestrandcolumn = 5 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene strand column (5)" if $genestrandcolumn <= 3;
@@ -270,13 +271,13 @@ while (my $inputline = <IN>) {
   my ($leftgenenames, $rightgenenames, $leftintrons, $rightintrons, $leftintrongenenames, $rightintrongenenames);
   if ($info_b eq ".") { # Single line variant in VCF
     ($leftgenenames,$rightgenenames) = getfields($info_a,"left_Gene","right_Gene");
-    ($leftintrons,$rightintrons) = getfields($info_a,"left_Intron","right_Intron") if $onelinetruncationtypes{$svtype};
+    ($leftintrons,$rightintrons) = getfields($info_a,"left_Intron","right_Intron") if $truncationtypes{$svtype};
     ($leftintrongenenames,$rightintrongenenames) = getfields($info_a,"left_IntronGene","right_IntronGene");
   } else { # Multiline variant in VCF (possibly only one line of variant present)
     $leftgenenames = getfields($info_a,"Gene");
     $leftintrongenenames = getfields($info_a,"IntronGene");
-    $leftintrons = getfields($info_a,"Intron") if $twolinetruncationtypes{$svtype};
-    $rightintrons = getfields($info_b,"Intron") if $twolinetruncationtypes{$svtype};
+    $leftintrons = getfields($info_a,"Intron") if $truncationtypes{$svtype};
+    $rightintrons = getfields($info_b,"Intron") if $truncationtypes{$svtype};
     $rightgenenames = getfields($info_b,"Gene");
     $rightintrongenenames = getfields($info_b,"IntronGene");
   }
@@ -284,10 +285,6 @@ while (my $inputline = <IN>) {
   my @rightgenenames = split(/\|/,$rightgenenames);
   my $localweight = $weight && $probleft;
   
-  if ($svtype eq 'TRX') {
-    
-  }
-
   my @probleft = split(/,/,$probleft) if $probleft;
   my @probright = split(/,/,$probright) if $probright;
 
@@ -309,14 +306,14 @@ while (my $inputline = <IN>) {
     }
   }
 
-  if ($svtype eq "INV" || $svtype eq "TRX" || $svtype eq "INS") {
+  if (exists $truncationtypes{$svtype}) {
     my @leftintrons = split(/\|/,$leftintrons);
     my @leftintrongenenames = split(/\|/,$leftintrongenenames);
     my @rightintrons = split(/\|/,$rightintrons);
     my @rightintrongenenames = split(/\|/,$rightintrongenenames);
-    my %leftintrons = map {$leftintrons[$_] => $leftintrongenenames[$_]} (0..$#leftintrons); # @leftintrons and @leftintrongenes should have the same number of elements if vcfanno is working as it should ## PICK UP HERE - cancel out introns present in both, then concatenate values() of both hashes
+    my %leftintrons = map {$leftintrons[$_] => $leftintrongenenames[$_]} (0..$#leftintrons); # @leftintrons and @leftintrongenes should have the same number of elements if vcfanno is working as it should
     my %rightintrons = map {$rightintrons[$_] => $rightintrongenenames[$_]} (0..$#rightintrons);
-    foreach my $intron (keys %leftintrons) {
+    foreach my $intron (keys %leftintrons) { # Cancel out introns hit by both right and left breakends
       if (exists $rightintrons{$intron}) {
 	delete $rightintrons{$intron};
 	delete $leftintrons{$intron};
