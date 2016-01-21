@@ -20,6 +20,8 @@ die "Standard input can only be used for one input file" if $reffile eq "stdin" 
 my ($reffilehandle, $filehandle);
 if($reffile eq "stdin") {
   $reffilehandle=*STDIN;
+} elsif ($reffile =~ /\.gz$/) {
+  open($reffilehandle,"zcat $reffile |") || die "Could not open $reffile: $!";
 } else {
   open($reffilehandle,"<$reffile") || die "Could not open $reffile: $!";
 }
@@ -35,6 +37,8 @@ die "Malformed VCF" unless defined $line;
 
 if($file eq "stdin") {
   $filehandle=*STDIN;
+} elsif ($file =~ /\.gz$/) {
+  open($filehandle,"zcat $file |") || die "Could not open $file: $!";
 } else {
   open($filehandle,"<$file") || die "Could not open $file: $!";
 }
