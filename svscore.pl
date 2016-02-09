@@ -66,7 +66,9 @@ if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon fil
   die "$exonfile not found or empty!";
 }
 
-my $intronfile = "introns.$genefile.$exonfile.bed.gz";
+my ($geneprefix) = ($genefile =~ /^(?:.*\/)?(.*)\.bed(?:\.gz)?$/);
+my ($exonprefix) = ($exonfile =~ /^(?:.*\/)?(.*)\.bed(?:\.gz)?$/);
+my $intronfile = "introns.$geneprefix.$exonprefix.bed.gz";
 if ($genefile eq 'refGene.genes.b37.bed.gz' && !-s $genefile && !-s $intronfile) { # Generate gene file if necessary
   print STDERR "Generating gene file: $genefile\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$13,\$4}' OFS=\"\\t\" | sort -k 1,1V -k 2,2n | uniq | bgzip -c > refGene.genes.b37.bed.gz");
@@ -156,7 +158,7 @@ if (defined $ARGV[0]) {
     $inputfile = "$prefix.vcf";
     system("gunzip -c $ARGV[0] > $prefix.vcf") && die "Could not unzip $ARGV[0]: $!";
   }
-  my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile > $reorderout"; # Sort, annotate, convert to BEDPE, grab header
+  my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile > $reorderout"; # Sort, annotate, reorder header
   my $preprocess2 = "vcftobedpe -i $reorderout > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi $reorderout";
   print STDERR "Preprocessing commands:\n$preprocess\n$preprocess2\n" if $debug;
   if (system($preprocess) || system($preprocess2) || -z $preprocessedfile) {
