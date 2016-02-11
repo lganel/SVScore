@@ -42,12 +42,15 @@ if($file eq "stdin") {
 } else {
   open($filehandle,"<$file") || die "Could not open $file: $!";
 }
-my @filelines = <$filehandle>;
-my @filenoheader = grep {!/^#/} @filelines;
-my @sortedhead = sort mysort (grep {/^#/} @filelines);
 
-push @sortedhead, @filenoheader;
+my @header = ();
+while (my $line = <$filehandle>) {
+  push @header, $line;
+  last if $line =~ /^#CHROM/;
+}
+my @sortedhead = sort mysort @header;
 print foreach (@sortedhead);
+print foreach (<$filehandle>);
 
 sub mysort {
   if (defined($reforder{$a}) && defined($reforder{$b})) {
