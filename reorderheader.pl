@@ -50,7 +50,7 @@ while (my $line = <$filehandle>) {
 }
 my @sortedhead = sort mysort @header;
 print foreach (@sortedhead);
-print foreach (<$filehandle>);
+while(<$filehandle>) {print};
 
 sub mysort {
   if (defined($reforder{$a}) && defined($reforder{$b})) {
