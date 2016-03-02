@@ -293,15 +293,15 @@ while (my $inputline = <IN>) {
 
   my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
-  if ($svtype eq "INS") {
-    $scores{"LEFT"} = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-10, $leftstart, "", $topn);
-    $scores{"RIGHT"} = cscoreop($caddfile, "", $ops, $leftchrom, $rightstop, $rightstop+10, "", $topn);
-  } else {
+  #if ($svtype eq "INS") {
+  #  $scores{"LEFT"} = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-10, $leftstart, "", $topn);
+  #  $scores{"RIGHT"} = cscoreop($caddfile, "", $ops, $leftchrom, $rightstop, $rightstop+10, "", $topn);
+  #} else {
     $scores{"LEFT"} = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft, $topn);
     $scores{"RIGHT"} = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright, $topn);
-  }
+  #}
 
-  if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV" || $svtype eq "MEI") {
+  if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
     my ($pos,$end) = getfields($info_a,"POS","END");
     if ($rightstop - $leftstart > 1000000) {
       $scores{"SPAN"} = ($ops eq "ALL" ? [100, 100, 100, 100] : [100]);

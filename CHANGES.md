@@ -7,7 +7,6 @@
  * Bug fixes/code improvements
  * Error handling
  * Modified temp file naming conventions
- * First attempt at insertion support
 
 ## 0.4 (11/12/15)
  * Account for regions of the genome which do not have CADD scores
