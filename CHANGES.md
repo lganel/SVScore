@@ -1,5 +1,8 @@
 ## 0.5 (Under development)
+ * Use exact breakpoint representation of SVs in BEDPE (in conjunction with new version of svtools)
+ * Calculate span scores between most likely bases
  * Calculate truncation scores for DELs
+ * Treat MEIs like BNDs
  * Only calculate truncation scores for truncated genes, not all genes hit by variants which truncate a gene
  * Bug fixes/code improvements
  * Error handling
