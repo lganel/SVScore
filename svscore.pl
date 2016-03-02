@@ -56,8 +56,6 @@ if ($ops eq 'ALL' || $ops eq 'TOP') {
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
 my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
 
-##TODO PRIORITY 2: Enable piping input through STDIN - use an option to specify input file rather than @ARGV
-
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
 if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
   print STDERR "Generating exon file: $exonfile\n" if $debug;
@@ -241,8 +239,9 @@ if ($support) {
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
 open(GENES, "$uncompressedgenefile") || die "Could not open $genefile: $!";
-foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found 
+foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found  (coordinates are 1-based)
   my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = (split(/\s+/,$geneline))[0..2,$geneanncolumn-1,$genestrandcolumn-1];
+  $genestart++; ## Move interval to 1-based (VCF) coordinates (don't correct $genestop because BED intervals are non-inclusive of end position, so corrections cancel out)
   if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume strand stays constant
     $genes{$genesymbol}->{$genechrom}->[0] = min($genes{$genesymbol}->{$genechrom}->[0], $genestart);
     $genes{$genesymbol}->{$genechrom}->[1] = max($genes{$genesymbol}->{$genechrom}->[1], $genestop);
@@ -260,6 +259,8 @@ while (my $inputline = <IN>) {
   # Parse line
   my @splitline = split(/\s+/,$inputline);
   my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $svtype, $info_a, $info_b) = @splitline[0..6, 10, 12, 13];
+  $leftstart++; ## Make intervals inclusive in VCF (1-based)
+  $rightstart++;
 
   $svtype = substr($svtype, 0, 3);
   unless (exists $types{$svtype}) {
@@ -301,13 +302,15 @@ while (my $inputline = <IN>) {
   }
 
   if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV" || $svtype eq "MEI") {
+    my ($pos,$end) = getfields($info_a,"POS","END");
     if ($rightstop - $leftstart > 1000000) {
       $scores{"SPAN"} = ($ops eq "ALL" ? [100, 100, 100, 100] : [100]);
     } else {
-      $scores{"SPAN"} = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart, $rightstop, "", $topn);
+      $scores{"SPAN"} = cscoreop($caddfile, "", $ops, $leftchrom, $pos, $end, "", $topn);
     }
   }
 
+  # Calculate truncation scores
   if (exists $truncationtypes{$svtype}) {
     my @leftintrons = split(/\|/,$leftintrons);
     my @leftintrongenenames = split(/\|/,$leftintrongenenames);
@@ -323,12 +326,6 @@ while (my $inputline = <IN>) {
     }
     @leftintrongenenames = uniq(values(%leftintrons));
     @rightintrongenenames = uniq(values(%rightintrons));
-#    my %leftintrons = map {$_ => 1} (split(/\|/,$leftintrons));
-#    my @rightintrons = split(/\|/,$rightintrons);
-
-    ## At worst, $leftintrons and $rightintrons are lists of introns. The only case in which the gene is not disrupted is if both lists are equal and nonempty, meaning that in every gene hit by this variant, both ends of the variant are confined to the same intron
-#    my $sameintrons = scalar (grep {$leftintrons{$_}} @rightintrons) == scalar @rightintrons && scalar @rightintrons > 0;
-#    unless ($sameintrons) {
     if (@leftintrongenenames) {
       my $leftscore = truncationscore($leftchrom, $leftstart, $leftstop, \@leftintrongenenames, \%genes, $caddfile, $ops, $topn, \%operations);
       $scores{"LTRUNC"} = $leftscore if $leftscore;
@@ -339,6 +336,7 @@ while (my $inputline = <IN>) {
     }
   }
 
+  # This is an ugly loop which transposes %scores so that the keys are operations, not intervals
   my %scoresbyop = ();
   foreach my $interval (sort {$intervals{$a} <=> $intervals{$b}} keys %scores) { # LEFT, RIGHT, (SPAN, LTRUNC, RTRUNC)
     foreach my $op (keys %operations) { # MAX, SUM, TOP$topn, MEAN
@@ -396,13 +394,24 @@ unless ($debug) {
     }
   }
 
-  if(system("rmdir svscoretmp")){
-    warn "Could not delete svscoretmp: $!";
+  # Delete svscoretmp if empty
+  opendir(DIR,"svscoretmp");
+  my @dir = readdir(DIR);
+  my $dircount = @dir;
+  foreach (@dir) {
+    $dircount-- if ($_ eq '.' || $_ eq '..');
   }
+  if ($dircount == 0) {
+    if(system("rmdir svscoretmp")) {
+      warn "Could not delete svscoretmp: $!";
+    }
+  }
+  closedir(DIR);
 }
 
-sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data
+sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. [$start,$stop] represents an inclusive interval in VCF coordinates
   my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist, $topn) = @_;
+#  print STDERR join(",",$start..$stop),"\n"; ## DEBUG
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
   my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
@@ -418,7 +427,10 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
     push @scores, max(@{$allscores{$pos}});
   }
 
+#  print STDERR join(", ",@scores),"\n"; ## DEBUG
+#  print STDERR join(", ",@probdist),"\n"; ## DEBUG
   @scores = pairwise {$a * $b}	@scores, @probdist if $weight;
+#  print STDERR join(", ",@scores),"\n"; ## DEBUG
   if ($ops eq 'MAX') {
     $res = [max(@scores)];
   } elsif ($ops eq 'SUM') {
@@ -434,6 +446,7 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
     my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
     $res = [max(@scores), nearest(0.001,sum(@scores)), nearest(0.001,sum(@topn) / scalar(@topn)), nearest(0.001,sum(@scores)/scalar(@scores))];
   }
+#  print STDERR "\n"; ## DEBUG
   return $res;
 }
 
