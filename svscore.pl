@@ -31,7 +31,8 @@ my $support = defined $options{'s'};
 my $weight = defined $options{'w'};
 my $verbose = defined $options{'v'};
 
-&main::HELP_MESSAGE() && die unless (defined $ARGV[0] || $support);
+my $pipedinput = !-t STDIN; ## Tells whether input is coming to STDIN through a pipe
+&main::HELP_MESSAGE() && die unless (defined $ARGV[0] || $pipedinput || $support);
 
 my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
 die "Could not find $caddfile" unless -s $caddfile;
@@ -141,11 +142,18 @@ print CONFIG "[[annotation]]\nfile=\"$compressedgenefile\"\nnames=[\"Gene\"]\nco
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-my ($prefix, $time);
-my $inputfile = $ARGV[0];
-if (defined $ARGV[0]) {
+my ($inputfile, $prefix, $time);
+if ($pipedinput) {
+  open(TEMP,">svscoretmp/pipedinput.tmp.vcf") || die "Could not open svscoretmp/pipedinput.tmp.vcf for writing; $!";
+  print TEMP <STDIN>;
+  close TEMP;
+  $inputfile = "svscoretmp/pipedinput.tmp.vcf";
+} else {
+  $inputfile = $ARGV[0];
+}
+if (defined $inputfile) {
   print STDERR "Preparing preprocessing command\n" if $debug;
-  ($prefix) = ($ARGV[0] =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
+  ($prefix) = ($inputfile =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
 
   # Tag intermediate files with timestamp to avoid collisions
   $time = gettimeofday();
@@ -230,7 +238,7 @@ if (defined $ARGV[0]) {
 }
 
 if ($support) {
-  if (defined $ARGV[0] && !$debug) {
+  if ((defined $ARGV[0] || $pipedinput) && !$debug) {
     unlink $preprocessedfile;
   }
   die;
@@ -378,7 +386,7 @@ unless ($debug) {
   unlink $preprocessedfile;
   unlink $vcfout;
   unlink $bedpeout;
-  unlink $inputfile if $compressed;
+  unlink $inputfile if $compressed || $pipedinput;
   
   if ($alteredgenefile) {
     if ($genefile =~ /\.gz$/) {

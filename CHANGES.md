@@ -1,4 +1,5 @@
 ## 0.5 (Under development)
+ * Allow for piping VCF files through standard input
  * Use exact breakpoint representation of SVs in BEDPE (in conjunction with new version of svtools)
  * Calculate span scores between most likely bases
  * Calculate truncation scores for DELs
