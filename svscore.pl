@@ -17,8 +17,6 @@ $main::VERSION = '0.4';
 
 my %possibleoperations = ("MAX", 0, "SUM", 1, "TOP", 2, "MEAN", 3); # Hash of supported operations
 my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "CNV", "MEI", "INS"); # Hash of supported svtypes
-#my %onelinetruncationtypes = map {$_ => 1} ("INV"); # Hash of svtypes represented on one line for which truncation scores are calculated
-#my %twolinetruncationtypes = map {$_ => 1} ("TRX", "INS"); # Hash of svtypes represented on two lines for which truncation scores are calculated
 my %truncationtypes = ("INV","TRX","INS","DEL"); # All svtypes for which truncation scores are calculated
 my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
@@ -142,21 +140,25 @@ print CONFIG "[[annotation]]\nfile=\"$compressedgenefile\"\nnames=[\"Gene\"]\nco
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-my ($inputfile, $prefix, $time);
+my ($inputfile, $prefix);
+my $time = gettimeofday();
 if ($pipedinput) {
-  open(TEMP,">svscoretmp/pipedinput.tmp.vcf") || die "Could not open svscoretmp/pipedinput.tmp.vcf for writing; $!";
+  open(TEMP,">svscoretmp/pipedinput.tmp$time.vcf") || die "Could not open svscoretmp/pipedinput.tmp$time.vcf for writing; $!";
   print TEMP <STDIN>;
   close TEMP;
-  $inputfile = "svscoretmp/pipedinput.tmp.vcf";
+  $inputfile = "svscoretmp/pipedinput.tmp$time.vcf";
 } else {
   $inputfile = $ARGV[0];
 }
 if (defined $inputfile) {
   print STDERR "Preparing preprocessing command\n" if $debug;
-  ($prefix) = ($inputfile =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
+  if ($pipedinput) {
+    $prefix = "pipedinput.tmp";
+  } else {
+    ($prefix) = ($inputfile =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
+  }
 
   # Tag intermediate files with timestamp to avoid collisions
-  $time = gettimeofday();
   $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
   my $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
   my $reorderout = "svscoretmp/$prefix$time.reorderheaderout.vcf";
@@ -186,7 +188,7 @@ if (defined $inputfile) {
     my @newheader = ();
     my @oldheader = <HEADER>;
     close HEADER;
-    die "Header indicates that SVScore has already been run on this file. Please remove these annotations and header lines to avoid confusion between old and new scores" if grep {/^##INFO=<ID=SVSCORE/} @oldheader;
+    #die "Header indicates that SVScore has already been run on this file. Please remove these annotations and header lines to avoid confusion between old and new scores" if grep {/^##INFO=<ID=SVSCORE/} @oldheader;
     my $headerline;
     while(($headerline = (shift @oldheader)) !~ /^##INFO/) {
       push @newheader, $headerline;
@@ -198,6 +200,7 @@ if (defined $inputfile) {
     unshift @oldheader, $headerline; # Return first format line to top of stack
 
     if ($ops eq 'MAX' || $ops eq 'ALL') {
+      push @newheader, "##INFO=<ID=SVSCOREMAX,Number=1,Type=Float,Description=\"Maximum of SVSCORE_MAX fields of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMAX_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMAX_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMAX_SPAN,Number=1,Type=Float,Description=\"Maximum C score in outer span of structural variant\">\n";
@@ -205,6 +208,7 @@ if (defined $inputfile) {
       push @newheader, "##INFO=<ID=SVSCOREMAX_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of truncated gene\">\n";
     }
     if ($ops eq 'SUM' || $ops eq 'ALL') {
+      push @newheader, "##INFO=<ID=SVSCORESUM,Number=1,Type=Float,Description=\"Maximum of SVSCORE_SUM fields of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCORESUM_LEFT,Number=1,Type=Float,Description=\"Sum of C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCORESUM_RIGHT,Number=1,Type=Float,Description=\"Sum of C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCORESUM_SPAN,Number=1,Type=Float,Description=\"Sum of C scores in outer span of structural variant\">\n";
@@ -212,6 +216,7 @@ if (defined $inputfile) {
       push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of truncated gene\">\n";
     }
     if ($ops eq 'TOP' || $ops eq 'ALL') {
+      push @newheader, "##INFO=<ID=SVSCORETOP$topn,Number=1,Type=Float,Description=\"Maximum of SVSCORE_TOP$topn fields of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LEFT,Number=1,Type=Float,Description=\"Mean of top $topn C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RIGHT,Number=1,Type=Float,Description=\"Mean of top $topn C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCORETOP${topn}_SPAN,Number=1,Type=Float,Description=\"Mean of top $topn C scores in outer span of structural variant\">\n";
@@ -219,6 +224,7 @@ if (defined $inputfile) {
       push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RTRUNC,Number=1,Type=Float,Description=\"Mean of top $topn C scores from beginning of right breakend to end of truncated gene\">\n";
     }
     if ($ops eq 'MEAN' || $ops eq 'ALL') {
+      push @newheader, "##INFO=<ID=SVSCOREMEAN,Number=1,Type=Float,Description=\"Maximum of SVSCORE_MEAN fields of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMEAN_LEFT,Number=1,Type=Float,Description=\"Mean of C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMEAN_RIGHT,Number=1,Type=Float,Description=\"Mean of C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMEAN_SPAN,Number=1,Type=Float,Description=\"Mean of C scores in outer span of structural variant\">\n";
@@ -226,7 +232,7 @@ if (defined $inputfile) {
       push @newheader, "##INFO=<ID=SVSCOREMEAN_RTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of right breakend to end of truncated gene\">\n";
     }
     push @newheader, @oldheader;
-    foreach (@newheader) {
+    foreach (uniq(@newheader)) {
       print OUT;
     }
     if ($weight && !(grep {/^##INFO=<ID=PRPOS,/} @newheader)) {
@@ -352,17 +358,22 @@ while (my $inputline = <IN>) {
     }
   }
 
-# Calculate maxes and add to info
+# Calculate maxes and add to info, replacing existing SVSCORE fields if they exist
   my %maxscores = ();
   foreach my $op (keys %scoresbyop) {
-    $info_a .= (";SVSCORE${op}=" . max(@{$scoresbyop{$op}})) unless $info_a eq "MISSING";
-    $info_b .= (";SVSCORE${op}=" . max(@{$scoresbyop{$op}})) unless $info_b eq "." || $info_b eq "MISSING";
+    $info_a = replaceoraddfield($op, "", $info_a, \%operations, \%scoresbyop);
+    $info_b = replaceoraddfield($op, "", $info_b, \%operations, \%scoresbyop);
+#      $info_a .= (";SVSCORE${op}=" . max(@{$scoresbyop{$op}})) unless $info_a eq "MISSING";
+#      $info_b .= (";SVSCORE${op}=" . max(@{$scoresbyop{$op}})) unless $info_b eq "." || $info_b eq "MISSING";
     if ($verbose) {
       foreach my $interval (keys %scores) {
-	$info_a .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless $info_a eq "MISSING";
-	$info_b .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless ($info_b eq "." || $info_b eq "MISSING");
+	$info_a = replaceoraddfield($op, $interval, $info_a, \%operations, \%scores);
+	$info_b = replaceoraddfield($op, $interval, $info_b, \%operations, \%scores);
+#	$info_a .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless $info_a eq "MISSING";
+#	$info_b .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless ($info_b eq "." || $info_b eq "MISSING");
       }
     }
+#    die $info_a,"\n"; ## DEBUG
   }
 
   $splitline[12] = $info_a;
@@ -498,6 +509,20 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
   }
 
   return $res;
+}
+
+sub replaceoraddfield {
+  my ($op, $interval, $info, $operationsref, $scoresref) = @_; ## $scoresref points to either %scores or %scoresbyop, depending on whether $interval is defined
+  my %scores = %{$scoresref};
+  my %operations = %{$operationsref};
+  my $field = "SVSCORE$op" . ($interval ? "_$interval" : "" );
+  my $newscore = ($interval ? $scores{$interval}->[$operations{$op}] : max(@{$scores{$op}}));
+  if ($info =~ /[\t;]$field=/) { ## Replace existing field
+    $info =~ s/$field=[^\t;]*/$field=$newscore/;
+  } elsif ($info ne "MISSING" && $info ne ".") { ## Info is present but $field needs to be added
+    $info .= (";$field=$newscore");
+  }
+  return $info;
 }
 
 sub main::HELP_MESSAGE() {
