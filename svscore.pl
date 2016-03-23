@@ -167,7 +167,7 @@ if (defined $inputfile) {
     system("gunzip -c $ARGV[0] > $prefix.vcf") && die "Could not unzip $ARGV[0]: $!";
   }
   my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile > $reorderout"; # Sort, annotate, reorder header
-  my $preprocess2 = "vcftobedpe -i $reorderout > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi $reorderout";
+  my $preprocess2 = "svtools vcftobedpe -i $reorderout > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi $reorderout";
   print STDERR "Preprocessing commands:\n$preprocess\n$preprocess2\n" if $debug;
   if (system($preprocess) || system($preprocess2) || -z $preprocessedfile) {
     unless ($debug) {
@@ -387,7 +387,7 @@ close IN;
 close OUT;
 
 # Convert back to vcf, sort, and add header
-system("bedpetovcf -b $bedpeout > $vcfout");
+system("svtools bedpetovcf -b $bedpeout > $vcfout");
 system("grep \"^#\" $vcfout > $vcfout.header");
 print `grep -v "^#" $vcfout | sort -k1,1V -k2,2n | cat $vcfout.header -`;
 unlink "$vcfout.header";
@@ -430,7 +430,7 @@ unless ($debug) {
 
 sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. [$start,$stop] represents an inclusive interval in VCF coordinates
   my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist, $topn) = @_;
-#  print STDERR join(",",$start..$stop),"\n"; ## DEBUG
+#  print STDERR join(",",$start..$stop),"\n\n"; ## DEBUG
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
   my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
