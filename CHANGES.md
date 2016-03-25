@@ -1,4 +1,5 @@
 ## 0.5 (Under development)
+ * Handle precise breakends by examining two bases which flank the breakend (one in each direction)
  * Allow for piping VCF files through standard input
  * Use exact breakpoint representation of SVs in BEDPE (in conjunction with new version of svtools)
  * Calculate span scores between most likely bases

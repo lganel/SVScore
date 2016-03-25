@@ -56,3 +56,5 @@ If only one mate line of a BND variant is present in the VCF file, left and righ
 -w is ignored with a warning if PRPOS is not represented in the header
 
 Variants with type DEL, DUP, MEI, or CNV which are over 1 Mb in length are automatically given a score of 100
+
+For breakends whose locations are known precisely, left/right breakend scores are calculated over the two bases that flank the breakend (one in each direction).

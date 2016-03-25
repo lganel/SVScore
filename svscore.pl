@@ -55,7 +55,7 @@ if ($ops eq 'ALL' || $ops eq 'TOP') {
 my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
 my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
 
-# Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary. May be a little slower than necessary in certain situations because some arguments are supplied by piping cat output rather than supplying filenames directly.
+# Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary
 if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
   print STDERR "Generating exon file: $exonfile\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -k 1,1V -k 2,2n | uniq > refGene.exons.b37.bed");
@@ -273,8 +273,16 @@ while (my $inputline = <IN>) {
   # Parse line
   my @splitline = split(/\s+/,$inputline);
   my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $svtype, $info_a, $info_b) = @splitline[0..6, 10, 12, 13];
-  $leftstart++; ## Make intervals inclusive in VCF (1-based)
-  $rightstart++;
+  if ($leftstart == $leftstop) {
+    $leftstop++; ## Examine adjacent bases for precise breakends
+  } else {
+    $leftstart++; ## Make intervals inclusive in VCF (1-based)
+  }
+  if ($rightstart == $rightstop) {
+    $rightstop++; ## Examine adjacent bases for precise breakends
+  } else {
+    $rightstart++; ## Make intervals inclusive in VCF (1-based)
+  }
 
   $svtype = substr($svtype, 0, 3);
   unless (exists $types{$svtype}) {
