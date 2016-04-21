@@ -2,7 +2,7 @@
 ## Author: Liron Ganel
 ## Laboratory of Ira Hall, McDonnell Genome Institute
 ## Washington University in St. Louis
-## Version 0.4
+## Version 0.5
 
 use strict;
 use Getopt::Std;
@@ -13,7 +13,7 @@ use Math::Round qw(nearest);
 
 sub main::HELP_MESSAGE(); # Declaration to make perl happy
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
-$main::VERSION = '0.4';
+$main::VERSION = '0.5';
 
 my %possibleoperations = ("MAX", 0, "SUM", 1, "TOP", 2, "MEAN", 3); # Hash of supported operations
 my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "CNV", "MEI", "INS"); # Hash of supported svtypes
@@ -21,7 +21,7 @@ my %truncationtypes = ("INV","TRX","INS","DEL"); # All svtypes for which truncat
 my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
 my %options = ();
-getopts('dswvc:g:e:m:o:t:p:',\%options);
+getopts('dswvc:g:e:m:o:t:p:i:',\%options);
 
 # Parse command line options, set variables, check input parameters
 my $debug = defined $options{'d'};
@@ -29,8 +29,7 @@ my $support = defined $options{'s'};
 my $weight = defined $options{'w'};
 my $verbose = defined $options{'v'};
 
-my $pipedinput = !-t STDIN; ## Tells whether input is coming to STDIN through a pipe
-&main::HELP_MESSAGE() && die unless (defined $ARGV[0] || $pipedinput || $support);
+&main::HELP_MESSAGE() && die unless (defined $options{'i'} || $support);
 
 my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
 die "Could not find $caddfile" unless -s $caddfile;
@@ -52,7 +51,8 @@ if ($ops eq 'ALL' || $ops eq 'TOP') {
   $operations{"TOP$topn"} = $operations{"TOP"};
   delete $operations{"TOP"};
 }
-my $compressed = ($ARGV[0] =~ /\.gz$/) if defined $ARGV[0];
+my $inputfile = (defined $options{'i'} ? $options{'i'} : "");
+my $compressed = ($inputfile =~ /\.gz$/) unless $support;
 my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary
@@ -140,31 +140,30 @@ print CONFIG "[[annotation]]\nfile=\"$compressedgenefile\"\nnames=[\"Gene\"]\nco
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
-my ($inputfile, $prefix);
+my ($prefix,$tempfile);
 my $time = gettimeofday();
-if ($pipedinput) {
-  open(TEMP,">svscoretmp/pipedinput.tmp$time.vcf") || die "Could not open svscoretmp/pipedinput.tmp$time.vcf for writing; $!";
+if ($inputfile eq "stdin") {
+  $tempfile = "svscoretmp/stdin$time.vcf";
+  open(TEMP,">$tempfile") || die "Could not open $tempfile for writing; $!";
   print TEMP <STDIN>;
   close TEMP;
-  $inputfile = "svscoretmp/pipedinput.tmp$time.vcf";
-} else {
-  $inputfile = $ARGV[0];
 }
-if (defined $inputfile) {
+
+if ($inputfile) {
   print STDERR "Preparing preprocessing command\n" if $debug;
-  if ($pipedinput) {
-    $prefix = "pipedinput.tmp";
+  if ($inputfile eq "stdin") {
+    $prefix = "stdin";
+    $inputfile = $tempfile;
   } else {
     ($prefix) = ($inputfile =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
   }
-
   # Tag intermediate files with timestamp to avoid collisions
   $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
   my $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
   my $reorderout = "svscoretmp/$prefix$time.reorderheaderout.vcf";
   if ($compressed) {
-    $inputfile = "$prefix.vcf";
-    system("gunzip -c $ARGV[0] > $prefix.vcf") && die "Could not unzip $ARGV[0]: $!";
+    system("gunzip -c $inputfile > svscoretmp/$prefix$time.vcf") && die "Could not unzip $inputfile: $!";
+    $inputfile = "svscoretmp/$prefix$time.vcf";
   }
   my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile > $reorderout"; # Sort, annotate, reorder header
   my $preprocess2 = "svtools vcftobedpe -i $reorderout > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi $reorderout";
@@ -188,7 +187,6 @@ if (defined $inputfile) {
     my @newheader = ();
     my @oldheader = <HEADER>;
     close HEADER;
-    #die "Header indicates that SVScore has already been run on this file. Please remove these annotations and header lines to avoid confusion between old and new scores" if grep {/^##INFO=<ID=SVSCORE/} @oldheader;
     my $headerline;
     while(($headerline = (shift @oldheader)) !~ /^##INFO/) {
       push @newheader, $headerline;
@@ -244,7 +242,7 @@ if (defined $inputfile) {
 }
 
 if ($support) {
-  if ((defined $ARGV[0] || $pipedinput) && !$debug) {
+  if ($inputfile && !$debug) {
     unlink $preprocessedfile;
   }
   die;
@@ -265,21 +263,26 @@ foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, st
 }
 close GENES;
 
+#my ($incorrectcount,$count) = (0,0); ## DEBUG
 print STDERR "Entering loop\n" if $debug;
 while (my $inputline = <IN>) {
   if ($inputline =~ /^#/) {
     next;
   }
+#  $count++; ## DEBUG
   # Parse line
   my @splitline = split(/\s+/,$inputline);
+  my ($leftprecise,$rightprecise) = (0,0);
   my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $svtype, $info_a, $info_b) = @splitline[0..6, 10, 12, 13];
   if ($leftstart == $leftstop) {
     $leftstop++; ## Examine adjacent bases for precise breakends
+    $leftprecise = 1;
   } else {
     $leftstart++; ## Make intervals inclusive in VCF (1-based)
   }
   if ($rightstart == $rightstop) {
     $rightstop++; ## Examine adjacent bases for precise breakends
+    $rightprecise = 1;
   } else {
     $rightstart++; ## Make intervals inclusive in VCF (1-based)
   }
@@ -313,14 +316,19 @@ while (my $inputline = <IN>) {
   my @probleft = split(/,/,$probleft) if $probleft;
   my @probright = split(/,/,$probright) if $probright;
 
+#  unless (@probleft == ($leftstop - $leftstart + 1) && @probright == ($rightstop - $rightstart + 1)) { ## DEBUG
+#    $incorrectcount++;
+#    print STDERR "Left prob: ",(scalar @probleft), ", Left bases: ", ($leftstop-$leftstart+1), "\nRight prob: ", (scalar @probright), ", Right bases: ", ($rightstop-$rightstart+1), "\n";
+#  }
+
   my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
   #if ($svtype eq "INS") {
   #  $scores{"LEFT"} = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-10, $leftstart, "", $topn);
   #  $scores{"RIGHT"} = cscoreop($caddfile, "", $ops, $leftchrom, $rightstop, $rightstop+10, "", $topn);
   #} else {
-    $scores{"LEFT"} = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft, $topn);
-    $scores{"RIGHT"} = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright, $topn);
+  $scores{"LEFT"} = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft, $topn, $leftprecise);
+  $scores{"RIGHT"} = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright, $topn, $rightprecise);
   #}
 
   if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
@@ -328,7 +336,7 @@ while (my $inputline = <IN>) {
     if ($rightstop - $leftstart > 1000000) {
       $scores{"SPAN"} = ($ops eq "ALL" ? [100, 100, 100, 100] : [100]);
     } else {
-      $scores{"SPAN"} = cscoreop($caddfile, "", $ops, $leftchrom, $pos, $end, "", $topn);
+      $scores{"SPAN"} = cscoreop($caddfile, "", $ops, $leftchrom, $pos, $end, "", $topn, "");
     }
   }
 
@@ -405,7 +413,7 @@ unless ($debug) {
   unlink $preprocessedfile;
   unlink $vcfout;
   unlink $bedpeout;
-  unlink $inputfile if $compressed || $pipedinput;
+  unlink $inputfile if $compressed || $prefix eq "stdin";
   
   if ($alteredgenefile) {
     if ($genefile =~ /\.gz$/) {
@@ -436,30 +444,52 @@ unless ($debug) {
   closedir(DIR);
 }
 
+#print STDERR "$incorrectcount,$count\n"; ## DEBUG
+
 sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. [$start,$stop] represents an inclusive interval in VCF coordinates
-  my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist, $topn) = @_;
-#  print STDERR join(",",$start..$stop),"\n\n"; ## DEBUG
+  my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist, $topn, $precise) = @_;
+  pop @{$probdist} if $weight; ## TEMPORARY FIX - remove final element of @probdist to make length of @probdist equal to # of bases in interval
   my @probdist = @{$probdist} if $weight;
   my (@scores,$res) = ();
   my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
   my @tabixoutputlines = split(/\n/,$tabixoutput);
   return ($ops eq 'ALL' ? [-1, -1, -1, -1] : [-1]) unless @tabixoutputlines; # Short circuit if interval has no C scores
   
-  my %allscores = (); # Hash from position to list of scores
+  my %allscores = (); # Hash from position to list of scores for each position
   foreach my $line (@tabixoutputlines) { # Populate hash
     my @split = split(/\s+/,$line);
     push @{$allscores{$split[1]}}, $split[5];
   }
-  foreach my $pos (sort {$a <=> $b}  keys %allscores) { # Populate @scores
+  foreach my $pos (sort {$a <=> $b}  keys %allscores) { # Populate @scores with max score at each position
     push @scores, max(@{$allscores{$pos}});
   }
 
-#  print STDERR join(", ",@scores),"\n"; ## DEBUG
-#  print STDERR join(", ",@probdist),"\n"; ## DEBUG
-  @scores = pairwise {$a * $b}	@scores, @probdist if $weight;
-#  print STDERR join(", ",@scores),"\n"; ## DEBUG
+  if ($weight && @scores != @probdist) { # If weighting with probdist, but C scores are not available for the entire interval, replace @probdist with list of probabilities for only those positions which have scores
+    my @newprobdist = ();
+    my %probdist = (); # Hash of pdf for each position 
+    foreach my $i ($start..$stop) { # Populate %probdist
+      $probdist{$i} = $probdist[$i-$start];
+    }
+    foreach my $pos (sort {$a <=> $b} keys %allscores) { # Get positions in interval that have C scores, collect in @newprobdist
+      push @newprobdist,$probdist{$pos};
+    }
+    @probdist = @newprobdist; # Replace @probdist
+  }
+
+#  print STDERR "Scores: ",join(", ",@scores),"\n"; ## DEBUG
+#  print STDERR "PRPOS: ",join(", ",@probdist),"\n" if $weight; ## DEBUG
+
+  if ($weight && !$precise) { # Rescale probability distribution to add up to 1
+    my $sumprobs = sum(@probdist);
+    foreach my $i (0..$#probdist) {
+      $probdist[$i] = $probdist[$i] / $sumprobs;
+    }
+    @scores = pairwise {$a * $b} @scores, @probdist;
+#    print STDERR "Probdist after normalization: ",join(',',@probdist),"\n"; ## DEBUG
+  }
+#  print STDERR "Newscores: ",join(", ",@scores),"\n"; ## DEBUG
   if ($ops eq 'MAX') {
-    $res = [max(@scores)];
+    $res = [nearest(0.001,max(@scores))];
   } elsif ($ops eq 'SUM') {
     $res = [nearest(0.001,sum(@scores))];
   } elsif ($ops=~/^TOP/) {
@@ -471,7 +501,7 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   } else {
     $topn = min($topn, scalar @scores);
     my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
-    $res = [max(@scores), nearest(0.001,sum(@scores)), nearest(0.001,sum(@topn) / scalar(@topn)), nearest(0.001,sum(@scores)/scalar(@scores))];
+    $res = [nearest(0.001,max(@scores)), nearest(0.001,sum(@scores)), nearest(0.001,sum(@topn) / scalar(@topn)), nearest(0.001,sum(@scores)/scalar(@scores))];
   }
 #  print STDERR "\n"; ## DEBUG
   return $res;
@@ -502,9 +532,9 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
     my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$chrom}}[0..2];	
     my $cscoreopres;
     if ($genestrand eq '+') {
-      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, max($genestart,$start),$genestop, "", $topn); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, max($genestart,$start),$genestop, "", $topn, ""); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
     } else {
-      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, $genestart,min($genestop,$stop), "", $topn); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
+      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, $genestart,min($genestop,$stop), "", $topn, ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
     }
     foreach my $op (keys %operations) {
       push @{$truncationscores{$op}}, $cscoreopres->[$operations{$op}];
@@ -534,7 +564,8 @@ sub replaceoraddfield {
 }
 
 sub main::HELP_MESSAGE() {
-  print STDERR "usage: ./svscore.pl [-dsvw] [-o op] [-t topnumber] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] vcf
+  print STDERR "usage: ./svscore.pl [-dsvw] [-o op] [-t topnumber] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] -i vcf
+    -i	      Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use \"-i stdin\" if using standard input
     -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -s	      Create/download supporting files and quit
     -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)

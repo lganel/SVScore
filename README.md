@@ -3,7 +3,8 @@ Prioritize structural variants based on CADD scores
 
 # Usage
 ```
-usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] vcf
+usage: ./svscore.pl [-dsvw] [-o op] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] -i vcf
+    -i	      Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use "-i stdin" if using standard input   
     -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -s	      Create/download supporting files and quit
     -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
