@@ -263,29 +263,14 @@ foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, st
 }
 close GENES;
 
-#my ($incorrectcount,$count) = (0,0); ## DEBUG
 print STDERR "Entering loop\n" if $debug;
 while (my $inputline = <IN>) {
   if ($inputline =~ /^#/) {
     next;
   }
-#  $count++; ## DEBUG
   # Parse line
   my @splitline = split(/\s+/,$inputline);
-  my ($leftprecise,$rightprecise) = (0,0);
   my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $svtype, $info_a, $info_b) = @splitline[0..6, 10, 12, 13];
-  if ($leftstart == $leftstop) {
-    $leftstop++; ## Examine adjacent bases for precise breakends
-    $leftprecise = 1;
-  } else {
-    $leftstart++; ## Make intervals inclusive in VCF (1-based)
-  }
-  if ($rightstart == $rightstop) {
-    $rightstop++; ## Examine adjacent bases for precise breakends
-    $rightprecise = 1;
-  } else {
-    $rightstart++; ## Make intervals inclusive in VCF (1-based)
-  }
 
   $svtype = substr($svtype, 0, 3);
   unless (exists $types{$svtype}) {
@@ -311,15 +296,9 @@ while (my $inputline = <IN>) {
   }
   my @leftgenenames = split(/\|/,$leftgenenames);
   my @rightgenenames = split(/\|/,$rightgenenames);
-  my $localweight = $weight && $probleft;
   
   my @probleft = split(/,/,$probleft) if $probleft;
   my @probright = split(/,/,$probright) if $probright;
-
-#  unless (@probleft == ($leftstop - $leftstart + 1) && @probright == ($rightstop - $rightstart + 1)) { ## DEBUG
-#    $incorrectcount++;
-#    print STDERR "Left prob: ",(scalar @probleft), ", Left bases: ", ($leftstop-$leftstart+1), "\nRight prob: ", (scalar @probright), ", Right bases: ", ($rightstop-$rightstart+1), "\n";
-#  }
 
   my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
@@ -327,8 +306,8 @@ while (my $inputline = <IN>) {
   #  $scores{"LEFT"} = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-10, $leftstart, "", $topn);
   #  $scores{"RIGHT"} = cscoreop($caddfile, "", $ops, $leftchrom, $rightstop, $rightstop+10, "", $topn);
   #} else {
-  $scores{"LEFT"} = cscoreop($caddfile, $localweight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft, $topn, $leftprecise);
-  $scores{"RIGHT"} = cscoreop($caddfile, $localweight, $ops, $rightchrom, $rightstart, $rightstop, \@probright, $topn, $rightprecise);
+  $scores{"LEFT"} = cscoreop($caddfile, $weight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft, $topn);
+  $scores{"RIGHT"} = cscoreop($caddfile, $weight, $ops, $rightchrom, $rightstart, $rightstop, \@probright, $topn);
   #}
 
   if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
@@ -336,7 +315,7 @@ while (my $inputline = <IN>) {
     if ($rightstop - $leftstart > 1000000) {
       $scores{"SPAN"} = ($ops eq "ALL" ? [100, 100, 100, 100] : [100]);
     } else {
-      $scores{"SPAN"} = cscoreop($caddfile, "", $ops, $leftchrom, $pos, $end, "", $topn, "");
+      $scores{"SPAN"} = cscoreop($caddfile, "", $ops, $leftchrom, $pos, $end, "", $topn);
     }
   }
 
@@ -379,17 +358,12 @@ while (my $inputline = <IN>) {
   foreach my $op (keys %scoresbyop) {
     $info_a = replaceoraddfield($op, "", $info_a, \%operations, \%scoresbyop);
     $info_b = replaceoraddfield($op, "", $info_b, \%operations, \%scoresbyop);
-#      $info_a .= (";SVSCORE${op}=" . max(@{$scoresbyop{$op}})) unless $info_a eq "MISSING";
-#      $info_b .= (";SVSCORE${op}=" . max(@{$scoresbyop{$op}})) unless $info_b eq "." || $info_b eq "MISSING";
     if ($verbose) {
       foreach my $interval (keys %scores) {
 	$info_a = replaceoraddfield($op, $interval, $info_a, \%operations, \%scores);
 	$info_b = replaceoraddfield($op, $interval, $info_b, \%operations, \%scores);
-#	$info_a .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless $info_a eq "MISSING";
-#	$info_b .= ";SVSCORE${op}_$interval=$scores{$interval}->[$operations{$op}]" unless ($info_b eq "." || $info_b eq "MISSING");
       }
     }
-#    die $info_a,"\n"; ## DEBUG
   }
 
   $splitline[12] = $info_a;
@@ -444,64 +418,89 @@ unless ($debug) {
   closedir(DIR);
 }
 
-#print STDERR "$incorrectcount,$count\n"; ## DEBUG
-
-sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. [$start,$stop] represents an inclusive interval in VCF coordinates
-  my ($filename, $weight, $ops, $chrom, $start, $stop, $probdist, $topn, $precise) = @_;
-  pop @{$probdist} if $weight; ## TEMPORARY FIX - remove final element of @probdist to make length of @probdist equal to # of bases in interval
-  my @probdist = @{$probdist} if $weight;
-  my (@scores,$res) = ();
-  my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
-  my @tabixoutputlines = split(/\n/,$tabixoutput);
-  return ($ops eq 'ALL' ? [-1, -1, -1, -1] : [-1]) unless @tabixoutputlines; # Short circuit if interval has no C scores
-  
-  my %allscores = (); # Hash from position to list of scores for each position
-  foreach my $line (@tabixoutputlines) { # Populate hash
-    my @split = split(/\s+/,$line);
-    push @{$allscores{$split[1]}}, $split[5];
-  }
-  foreach my $pos (sort {$a <=> $b}  keys %allscores) { # Populate @scores with max score at each position
-    push @scores, max(@{$allscores{$pos}});
-  }
-
-  if ($weight && @scores != @probdist) { # If weighting with probdist, but C scores are not available for the entire interval, replace @probdist with list of probabilities for only those positions which have scores
-    my @newprobdist = ();
-    my %probdist = (); # Hash of pdf for each position 
+sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. In VCF coordinates, $start is the base preceding the first possible breakpoint, and $stop is the base preceding the last possible breakpoint. In BED, $start is the first possible breakpoint, and $stop is the final possible breakpoint
+  my ($filename, $weight, $ops, $chrom, $start, $stop, $prpos, $topn) = @_;
+#  pop @{$prpos} if $weight; ## TEMPORARY FIX - remove final element of @probdist to make length of @probdist equal to # of bases in interval
+  my @prpos = @{$prpos} if $weight;
+  return ($ops eq 'ALL' ? [-1, -1, -1, -1] : [-1]) if ($weight && !scalar @prpos);
+  my %probdist = () if $weight; # Hash of pdf for each position 
+  if ($weight) {
     foreach my $i ($start..$stop) { # Populate %probdist
-      $probdist{$i} = $probdist[$i-$start];
+      $probdist{$i} = $prpos[$i-$start];
     }
-    foreach my $pos (sort {$a <=> $b} keys %allscores) { # Get positions in interval that have C scores, collect in @newprobdist
-      push @newprobdist,$probdist{$pos};
+  }
+  
+  my (%bptscores,$res) = (); # %bptscores = {BEDcoordinate => Possiblebreakpointscore}
+  my $stopinc = $stop+1; ## Increment end coordinate for tabix so that we capture the CADD score for the base following the interval to allow for calculation of a score for the final possible breakpoint
+  my $tabixoutput = `tabix $filename $chrom:$start-$stopinc`;
+  my @tabixoutputlines = split(/\n/,$tabixoutput);
+#  print STDERR "$chrom:$start-$stop\n"; ## DEBUG
+#  print STDERR Dumper(keys %probdist),"\n"; ## DEBUG
+  
+  my %basescores = (); # Hash from VCF position to list of scores for each position
+  foreach my $line (@tabixoutputlines) { # Populate %basescores with tabix output
+    my @split = split(/\s+/,$line);
+    push @{$basescores{$split[1]}}, $split[5];
+  }
+  foreach my $pos (sort {$a <=> $b} keys %basescores) { # Replace values in %basescores with max score at each VCF position
+#    push @basemaxscores, max(@{$basescores{$pos}});
+    $basescores{$pos} = max(@{$basescores{$pos}});
+    if (exists $basescores{$pos-1}) { # Calculate all scores for possible breakpoints by averaging the base scores of the two flanking bases of the possible breakpoint. Place scores in %bptscores
+      $bptscores{$pos-1} = ($basescores{$pos-1} + $basescores{$pos}) / 2;
+      delete $basescores{$pos-1}; # Save some memory - the basescores for all bases before $pos are now useless
     }
-    @probdist = @newprobdist; # Replace @probdist
   }
 
-#  print STDERR "Scores: ",join(", ",@scores),"\n"; ## DEBUG
+#  print STDERR "\n$chrom:$start-$stop"; ## DEBUG
+  return ($ops eq 'ALL' ? [-1, -1, -1, -1] : [-1]) unless @tabixoutputlines && %bptscores; # Short circuit if interval does not have enough base scores to calculate breakpoint scores (i.e. there are no 2 consecutive bases with scores in the interval)
+#  if ($weight && scalar(keys %bptscores) != @probdist) { # If weighting with probdist, but C scores are not available for the entire interval, trim %probdist to contain only those BED positions which have possible breakpoint scores (i.e. base scores for two flanking bases are available)
+##    my @newprobdist = ();
+##    foreach my $pos (sort {$a <=> $b} keys %basescores) { # Get probability of positions in interval that have C scores, collect in @newprobdist
+##      push @newprobdist,$probdist{$pos};
+##    }
+##    @probdist = @newprobdist; # Replace @probdist
+#    for my $pos (keys %probdist) { # Get rid of probabilities for any possible breakpoint position without a score
+#      delete $probdist{$pos} unless exists $bptscores{$pos};
+#    }
+#  }
+
+#  print STDERR "Scores: ",join(", ",@basemaxscores),"\n"; ## DEBUG
 #  print STDERR "PRPOS: ",join(", ",@probdist),"\n" if $weight; ## DEBUG
 
-  if ($weight && !$precise) { # Rescale probability distribution to add up to 1
-    my $sumprobs = sum(@probdist);
-    foreach my $i (0..$#probdist) {
-      $probdist[$i] = $probdist[$i] / $sumprobs;
-    }
-    @scores = pairwise {$a * $b} @scores, @probdist;
-#    print STDERR "Probdist after normalization: ",join(',',@probdist),"\n"; ## DEBUG
+  my (@bptscores,@probdist) = ();
+  foreach my $pos (sort {$a <=> $b} keys %bptscores) { # Collapse %bptscores and %probdist into arrays, getting rid of positions in %probdist with no corresponding possible breakpoint scores
+    push @bptscores, $bptscores{$pos};
+    push @probdist, $probdist{$pos} if $weight;
   }
-#  print STDERR "Newscores: ",join(", ",@scores),"\n"; ## DEBUG
+
+  if ($weight) { # Rescale probability distribution to add up to 1 and weight @bptscores
+    my $sumprobs = sum(@probdist);
+    unless ($sumprobs == 1) {
+      foreach my $i (0..$#probdist) {
+	$probdist[$i] = $probdist[$i] / $sumprobs;
+      }
+    }
+    @bptscores = pairwise {$a * $b} @bptscores, @probdist;
+  }
+
+#  print STDERR "\t\t\t@bptscores\n"; ## DEBUG
+
+#    print STDERR "Probdist after normalization: ",join(',',@probdist),"\n"; ## DEBUG
+#  print STDERR "Newscores: ",join(", ",@bptscores),"\n"; ## DEBUG
   if ($ops eq 'MAX') {
-    $res = [nearest(0.001,max(@scores))];
+    $res = [nearest(0.001,max(@bptscores))];
   } elsif ($ops eq 'SUM') {
-    $res = [nearest(0.001,sum(@scores))];
+    $res = [nearest(0.001,sum(@bptscores))];
   } elsif ($ops=~/^TOP/) {
-    $topn = min($topn, scalar @scores);
-    my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
+    $topn = min($topn, scalar @bptscores);
+    my @topn = (sort {$b <=> $a} @bptscores)[0..$topn-1];
     $res = [nearest(0.001,sum(@topn) / scalar(@topn))];
   } elsif ($ops eq 'MEAN') {
-    $res = [nearest(0.001,sum(@scores)/scalar(@scores))];
+    $res = [nearest(0.001,sum(@bptscores)/scalar(@bptscores))];
   } else {
-    $topn = min($topn, scalar @scores);
-    my @topn = (sort {$b <=> $a} @scores)[0..$topn-1];
-    $res = [nearest(0.001,max(@scores)), nearest(0.001,sum(@scores)), nearest(0.001,sum(@topn) / scalar(@topn)), nearest(0.001,sum(@scores)/scalar(@scores))];
+    $topn = min($topn, scalar @bptscores);
+    my @topn = (sort {$b <=> $a} @bptscores)[0..$topn-1];
+    $res = [nearest(0.001,max(@bptscores)), nearest(0.001,sum(@bptscores)), nearest(0.001,sum(@topn) / scalar(@topn)), nearest(0.001,sum(@bptscores)/scalar(@bptscores))];
   }
 #  print STDERR "\n"; ## DEBUG
   return $res;
@@ -532,9 +531,9 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
     my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$chrom}}[0..2];	
     my $cscoreopres;
     if ($genestrand eq '+') {
-      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, max($genestart,$start),$genestop, "", $topn, ""); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, max($genestart,$start),$genestop, "", $topn); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
     } else {
-      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, $genestart,min($genestop,$stop), "", $topn, ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
+      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, $genestart,min($genestop,$stop), "", $topn); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
     }
     foreach my $op (keys %operations) {
       push @{$truncationscores{$op}}, $cscoreopres->[$operations{$op}];
