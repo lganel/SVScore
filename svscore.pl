@@ -10,12 +10,13 @@ use List::Util qw(max min sum);
 use List::MoreUtils qw(pairwise uniq);
 use Time::HiRes qw(gettimeofday);
 use Math::Round qw(nearest);
+use Data::Dumper; ## DEBUG
 
 sub main::HELP_MESSAGE(); # Declaration to make perl happy
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
 $main::VERSION = '0.5';
 
-my %possibleoperations = ("MAX", 0, "SUM", 1, "TOP", 2, "MEAN", 3); # Hash of supported operations
+my %possibleoperations = ("MAX", 1, "SUM", 1, "TOP", 1, "MEAN", 1); # Hash of supported operations
 my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "CNV", "MEI", "INS"); # Hash of supported svtypes
 my %truncationtypes = ("INV","TRX","INS","DEL"); # All svtypes for which truncation scores are calculated
 my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
@@ -43,14 +44,23 @@ $genestrandcolumn = 5 && warn "Gene annotation column must be greater than 3 - d
 die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==$genestrandcolumn;
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
 $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
-my $ops = (defined $options{'o'} ? $options{'o'} : 'ALL');
-my $topn = (defined $options{'t'} ? $options{'t'} : 100);
-warn "Unrecognized operation specified: $ops\n" && die main::HELP_MESSAGE() unless ($ops eq "ALL" || defined $possibleoperations{$ops});
-my %operations = ($ops eq 'ALL' ? %possibleoperations : ($ops => 0)); # Hash of indices for each operation within lists in the values of %scores
-if ($ops eq 'ALL' || $ops eq 'TOP') {
-  $operations{"TOP$topn"} = $operations{"TOP"};
-  delete $operations{"TOP"};
+my $ops = (defined $options{'o'} ? $options{'o'} : 'TOP10');
+#my $topn = (defined $options{'t'} ? $options{'t'} : 100);
+my @ops = uniq(split(/,/,$ops));
+my %operations = (); # Hash of chosen operations
+foreach my $i (0..$#ops) { # Populate %operations with chosen operations given by -o
+  my ($op) = ($ops[$i] =~ /^([^\d]*)/);
+  unless (defined $possibleoperations{$op}) {
+    warn "Unrecognized operation specified: $op\n";
+    die main::HELP_MESSAGE();
+  }
+  $operations{$ops[$i]} = $i; 
 }
+#my %operations = ($ops eq 'ALL' ? %possibleoperations : ($ops => 0)); # Hash of indices for each operation within lists in the values of %scores
+#if (defined $operations{"TOP"}) { # Replace "TOP" with "TOP$topn" in %operations keys 
+#  $operations{"TOP$topn"} = $operations{"TOP"};
+#  delete $operations{"TOP"};
+#}
 my $inputfile = (defined $options{'i'} ? $options{'i'} : "");
 my $compressed = ($inputfile =~ /\.gz$/) unless $support;
 my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
@@ -197,7 +207,7 @@ if ($inputfile) {
     }
     unshift @oldheader, $headerline; # Return first format line to top of stack
 
-    if ($ops eq 'MAX' || $ops eq 'ALL') {
+    if (defined $operations{"MAX"}) {
       push @newheader, "##INFO=<ID=SVSCOREMAX,Number=1,Type=Float,Description=\"Maximum of SVSCORE_MAX fields of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMAX_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMAX_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
@@ -205,7 +215,7 @@ if ($inputfile) {
       push @newheader, "##INFO=<ID=SVSCOREMAX_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of truncated gene\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMAX_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of truncated gene\">\n";
     }
-    if ($ops eq 'SUM' || $ops eq 'ALL') {
+    if (defined $operations{"SUM"}) {
       push @newheader, "##INFO=<ID=SVSCORESUM,Number=1,Type=Float,Description=\"Maximum of SVSCORE_SUM fields of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCORESUM_LEFT,Number=1,Type=Float,Description=\"Sum of C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCORESUM_RIGHT,Number=1,Type=Float,Description=\"Sum of C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
@@ -213,15 +223,18 @@ if ($inputfile) {
       push @newheader, "##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of truncated gene\">\n";
       push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of truncated gene\">\n";
     }
-    if ($ops eq 'TOP' || $ops eq 'ALL') {
-      push @newheader, "##INFO=<ID=SVSCORETOP$topn,Number=1,Type=Float,Description=\"Maximum of SVSCORE_TOP$topn fields of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-      push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LEFT,Number=1,Type=Float,Description=\"Mean of top $topn C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-      push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RIGHT,Number=1,Type=Float,Description=\"Mean of top $topn C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
-      push @newheader, "##INFO=<ID=SVSCORETOP${topn}_SPAN,Number=1,Type=Float,Description=\"Mean of top $topn C scores in outer span of structural variant\">\n";
-      push @newheader, "##INFO=<ID=SVSCORETOP${topn}_LTRUNC,Number=1,Type=Float,Description=\"Mean of top $topn C scores from beginning of left breakend to end of truncated gene\">\n";
-      push @newheader, "##INFO=<ID=SVSCORETOP${topn}_RTRUNC,Number=1,Type=Float,Description=\"Mean of top $topn C scores from beginning of right breakend to end of truncated gene\">\n";
+    foreach my $op (keys %operations) {
+      if ($op =~ /^TOP/) {
+	my ($n) = ($op =~ /^TOP(\d+)/);
+	push @newheader, "##INFO=<ID=SVSCORETOP$n,Number=1,Type=Float,Description=\"Maximum of SVSCORE_TOP$n fields of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+	push @newheader, "##INFO=<ID=SVSCORETOP${n}_LEFT,Number=1,Type=Float,Description=\"Mean of top $n C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+	push @newheader, "##INFO=<ID=SVSCORETOP${n}_RIGHT,Number=1,Type=Float,Description=\"Mean of top $n C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
+	push @newheader, "##INFO=<ID=SVSCORETOP${n}_SPAN,Number=1,Type=Float,Description=\"Mean of top $n C scores in outer span of structural variant\">\n";
+	push @newheader, "##INFO=<ID=SVSCORETOP${n}_LTRUNC,Number=1,Type=Float,Description=\"Mean of top $n C scores from beginning of left breakend to end of truncated gene\">\n";
+	push @newheader, "##INFO=<ID=SVSCORETOP${n}_RTRUNC,Number=1,Type=Float,Description=\"Mean of top $n C scores from beginning of right breakend to end of truncated gene\">\n";
+      }
     }
-    if ($ops eq 'MEAN' || $ops eq 'ALL') {
+    if (defined $operations{"MEAN"}) {
       push @newheader, "##INFO=<ID=SVSCOREMEAN,Number=1,Type=Float,Description=\"Maximum of SVSCORE_MEAN fields of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMEAN_LEFT,Number=1,Type=Float,Description=\"Mean of C scores in left breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMEAN_RIGHT,Number=1,Type=Float,Description=\"Mean of C scores in right breakend of structural variant" . ($weight ? ", weighted by probability distribution" : "") . "\">\n";
@@ -306,16 +319,16 @@ while (my $inputline = <IN>) {
   #  $scores{"LEFT"} = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-10, $leftstart, "", $topn);
   #  $scores{"RIGHT"} = cscoreop($caddfile, "", $ops, $leftchrom, $rightstop, $rightstop+10, "", $topn);
   #} else {
-  $scores{"LEFT"} = cscoreop($caddfile, $weight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft, $topn);
-  $scores{"RIGHT"} = cscoreop($caddfile, $weight, $ops, $rightchrom, $rightstart, $rightstop, \@probright, $topn);
+  $scores{"LEFT"} = cscoreop($caddfile, $weight, $ops, $leftchrom, $leftstart, $leftstop, \@probleft);
+  $scores{"RIGHT"} = cscoreop($caddfile, $weight, $ops, $rightchrom, $rightstart, $rightstop, \@probright);
   #}
 
   if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
     my ($pos,$end) = getfields($info_a,"POS","END");
     if ($rightstop - $leftstart > 1000000) {
-      $scores{"SPAN"} = ($ops eq "ALL" ? [100, 100, 100, 100] : [100]);
+      $scores{"SPAN"} = (100) x @ops;
     } else {
-      $scores{"SPAN"} = cscoreop($caddfile, "", $ops, $leftchrom, $pos, $end, "", $topn);
+      $scores{"SPAN"} = cscoreop($caddfile, "", $ops, $leftchrom, $pos, $end, "");
     }
   }
 
@@ -336,11 +349,11 @@ while (my $inputline = <IN>) {
     @leftintrongenenames = uniq(values(%leftintrons));
     @rightintrongenenames = uniq(values(%rightintrons));
     if (@leftintrongenenames) {
-      my $leftscore = truncationscore($leftchrom, $leftstart, $leftstop, \@leftintrongenenames, \%genes, $caddfile, $ops, $topn, \%operations);
+      my $leftscore = truncationscore($leftchrom, $leftstart, $leftstop, \@leftintrongenenames, \%genes, $caddfile, $ops, \%operations);
       $scores{"LTRUNC"} = $leftscore if $leftscore;
     }
     if (@rightintrongenenames) {
-      my $rightscore = truncationscore($rightchrom, $rightstart, $rightstop, \@rightintrongenenames, \%genes, $caddfile, $ops, $topn, \%operations);
+      my $rightscore = truncationscore($rightchrom, $rightstart, $rightstop, \@rightintrongenenames, \%genes, $caddfile, $ops, \%operations);
       $scores{"RTRUNC"} = $rightscore if $rightscore;
     }
   }
@@ -348,7 +361,7 @@ while (my $inputline = <IN>) {
   # This is an ugly loop which transposes %scores so that the keys are operations, not intervals
   my %scoresbyop = ();
   foreach my $interval (sort {$intervals{$a} <=> $intervals{$b}} keys %scores) { # LEFT, RIGHT, (SPAN, LTRUNC, RTRUNC)
-    foreach my $op (keys %operations) { # MAX, SUM, TOP$topn, MEAN
+    foreach my $op (@ops) { # MAX, SUM, TOP$topn, MEAN
       push @{$scoresbyop{$op}}, $scores{$interval}->[$operations{$op}];
     }
   }
@@ -419,10 +432,14 @@ unless ($debug) {
 }
 
 sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. In VCF coordinates, $start is the base preceding the first possible breakpoint, and $stop is the base preceding the last possible breakpoint. In BED, $start is the first possible breakpoint, and $stop is the final possible breakpoint
-  my ($filename, $weight, $ops, $chrom, $start, $stop, $prpos, $topn) = @_;
+  my ($filename, $weight, $ops, $chrom, $start, $stop, $prpos) = @_;
+  my @ops = split(/,/,$ops);
 #  pop @{$prpos} if $weight; ## TEMPORARY FIX - remove final element of @probdist to make length of @probdist equal to # of bases in interval
   my @prpos = @{$prpos} if $weight;
-  return ($ops eq 'ALL' ? [-1, -1, -1, -1] : [-1]) if ($weight && !scalar @prpos);
+  if ($weight && !scalar @prpos) { ## Don't calculate scores if other scores are being weighted but this variant does not have a probability distribution
+    my @res = (-1) x @ops;
+    return \@res;
+  }
   my %probdist = () if $weight; # Hash of pdf for each position 
   if ($weight) {
     foreach my $i ($start..$stop) { # Populate %probdist
@@ -452,7 +469,10 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   }
 
 #  print STDERR "\n$chrom:$start-$stop"; ## DEBUG
-  return ($ops eq 'ALL' ? [-1, -1, -1, -1] : [-1]) unless @tabixoutputlines && %bptscores; # Short circuit if interval does not have enough base scores to calculate breakpoint scores (i.e. there are no 2 consecutive bases with scores in the interval)
+  unless (@tabixoutputlines && %bptscores) { # Short circuit if interval does not have enough base scores to calculate breakpoint scores (i.e. there are no 2 consecutive bases with scores in the interval)
+    my @res = (-1) x @ops;
+    return \@res; 
+  }
 #  if ($weight && scalar(keys %bptscores) != @probdist) { # If weighting with probdist, but C scores are not available for the entire interval, trim %probdist to contain only those BED positions which have possible breakpoint scores (i.e. base scores for two flanking bases are available)
 ##    my @newprobdist = ();
 ##    foreach my $pos (sort {$a <=> $b} keys %basescores) { # Get probability of positions in interval that have C scores, collect in @newprobdist
@@ -487,22 +507,20 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
 
 #    print STDERR "Probdist after normalization: ",join(',',@probdist),"\n"; ## DEBUG
 #  print STDERR "Newscores: ",join(", ",@bptscores),"\n"; ## DEBUG
-  if ($ops eq 'MAX') {
-    $res = [nearest(0.001,max(@bptscores))];
-  } elsif ($ops eq 'SUM') {
-    $res = [nearest(0.001,sum(@bptscores))];
-  } elsif ($ops=~/^TOP/) {
-    $topn = min($topn, scalar @bptscores);
-    my @topn = (sort {$b <=> $a} @bptscores)[0..$topn-1];
-    $res = [nearest(0.001,sum(@topn) / scalar(@topn))];
-  } elsif ($ops eq 'MEAN') {
-    $res = [nearest(0.001,sum(@bptscores)/scalar(@bptscores))];
-  } else {
-    $topn = min($topn, scalar @bptscores);
-    my @topn = (sort {$b <=> $a} @bptscores)[0..$topn-1];
-    $res = [nearest(0.001,max(@bptscores)), nearest(0.001,sum(@bptscores)), nearest(0.001,sum(@topn) / scalar(@topn)), nearest(0.001,sum(@bptscores)/scalar(@bptscores))];
+  foreach my $op (@ops) {
+    if ($op eq 'MAX') {
+      push @{$res},nearest(0.001,max(@bptscores));
+    } elsif ($op eq 'SUM') {
+      push @{$res},nearest(0.001,sum(@bptscores));
+    } elsif ($op=~/^TOP(\d+)$/) {
+      my $topn = $1;
+      $topn = min($topn, scalar @bptscores);
+      my @topn = (sort {$b <=> $a} @bptscores)[0..$topn-1];
+      push @{$res},nearest(0.001,sum(@topn) / scalar(@topn));
+    } elsif ($op eq 'MEAN') {
+      push @{$res}, nearest(0.001,sum(@bptscores)/scalar(@bptscores));
+    }
   }
-#  print STDERR "\n"; ## DEBUG
   return $res;
 }
 
@@ -521,7 +539,8 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
 }
 
 sub truncationscore { # Calculate truncation score based on the coordinates of a given breakend and the names of the genes it hits
-  my ($chrom, $start, $stop, $introngenesref, $genesref, $caddfile, $ops, $topn, $operationsref) = @_;
+  my ($chrom, $start, $stop, $introngenesref, $genesref, $caddfile, $ops, $operationsref) = @_;
+  my @ops = split (/,/,$ops);
   my @introngenes = @{$introngenesref};
   return "" unless @introngenes;
   my %operations = %{$operationsref};
@@ -531,9 +550,9 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
     my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$chrom}}[0..2];	
     my $cscoreopres;
     if ($genestrand eq '+') {
-      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, max($genestart,$start),$genestop, "", $topn); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, max($genestart,$start),$genestop, ""); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
     } else {
-      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, $genestart,min($genestop,$stop), "", $topn); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
+      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, $genestart,min($genestop,$stop), ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
     }
     foreach my $op (keys %operations) {
       push @{$truncationscores{$op}}, $cscoreopres->[$operations{$op}];
