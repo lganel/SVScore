@@ -197,15 +197,16 @@ if ($inputfile) {
   my @oldheader = <HEADER>;
   close HEADER;
 
-  if ($ops =~ /WEIGHTED/ && !(grep {/^##INFO=<ID=PRPOS,/} @newheader)) { # If an op is weighted, but PRPOS is absent from the header, switch to unweighted operations with a warning
+  if ($ops =~ /WEIGHTED/ && !(grep {/^##INFO=<ID=PRPOS,/} @oldheader)) { # If an op is weighted, but PRPOS is absent from the header, switch to unweighted operations with a warning
     warn "*****PRPOS not found in header - switching to unweighted operations*****\n";
     $ops =~ s/WEIGHTED//g;
     foreach my $op (keys %operations) {
-      if ($op =~ /WEIGHTED/);
-      my $value = $operations{$op};
-      delete $operations{$op};
-      $op =~ s/WEIGHTED//;
-      $operations{$op} = $value;
+      if ($op =~ /WEIGHTED/) {
+	my $value = $operations{$op};
+	delete $operations{$op};
+	$op =~ s/WEIGHTED//;
+	$operations{$op} = $value;
+      }
     }
   }
 
@@ -239,21 +240,21 @@ if ($inputfile) {
     my $weighted = ($op =~ /WEIGHTED$/);
     if ($op =~ /^TOP\d+/) {
       my ($n) = ($op =~ /^TOP(\d+)/);
-      push @newheader, "##INFO=<ID=SVSCORETOP$n,Number=1,Type=Float,Description=\"Maximum of SVSCORE_TOP$n fields of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
-      push @newheader, "##INFO=<ID=SVSCORETOP${n}_LEFT,Number=1,Type=Float,Description=\"Mean of top $n C scores in left breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
-      push @newheader, "##INFO=<ID=SVSCORETOP${n}_RIGHT,Number=1,Type=Float,Description=\"Mean of top $n C scores in right breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
-      push @newheader, "##INFO=<ID=SVSCORETOP${n}_SPAN,Number=1,Type=Float,Description=\"Mean of top $n C scores in outer span of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
-      push @newheader, "##INFO=<ID=SVSCORETOP${n}_LTRUNC,Number=1,Type=Float,Description=\"Mean of top $n C scores from beginning of left breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
-      push @newheader, "##INFO=<ID=SVSCORETOP${n}_RTRUNC,Number=1,Type=Float,Description=\"Mean of top $n C scores from beginning of right breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
+      push @newheader, "##INFO=<ID=SVSCORETOP$n,Number=1,Type=Float,Description=\"Maximum of SVSCORE_TOP$n fields of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORETOP${n}_LEFT,Number=1,Type=Float,Description=\"Mean of top $n C scores in left breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORETOP${n}_RIGHT,Number=1,Type=Float,Description=\"Mean of top $n C scores in right breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORETOP${n}_SPAN,Number=1,Type=Float,Description=\"Mean of top $n C scores in outer span of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORETOP${n}_LTRUNC,Number=1,Type=Float,Description=\"Mean of top $n C scores from beginning of left breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORETOP${n}_RTRUNC,Number=1,Type=Float,Description=\"Mean of top $n C scores from beginning of right breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
     }
    
     if ($op =~ /^MEAN/) {
-      push @newheader, "##INFO=<ID=SVSCOREMEAN,Number=1,Type=Float,Description=\"Maximum of SVSCORE_MEAN fields of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMEAN_LEFT,Number=1,Type=Float,Description=\"Mean of C scores in left breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMEAN_RIGHT,Number=1,Type=Float,Description=\"Mean of C scores in right breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMEAN_SPAN,Number=1,Type=Float,Description=\"Mean of C scores in outer span of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMEAN_LTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of left breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMEAN_RTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of right breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . \">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMEAN,Number=1,Type=Float,Description=\"Maximum of SVSCORE_MEAN fields of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMEAN_LEFT,Number=1,Type=Float,Description=\"Mean of C scores in left breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMEAN_RIGHT,Number=1,Type=Float,Description=\"Mean of C scores in right breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMEAN_SPAN,Number=1,Type=Float,Description=\"Mean of C scores in outer span of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMEAN_LTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of left breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMEAN_RTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of right breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
     }
   }
   push @newheader, @oldheader;

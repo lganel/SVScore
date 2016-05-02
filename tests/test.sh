@@ -14,7 +14,7 @@ grep -v "^#" stresstest.svscore.vcf > stresstest.svscore.noheader.vcf
 # Perform stress test
 cd ..
 echo "********Stress Test********"
-./svscore.pl -dvwc tests/dummyCADD.tsv.gz -i tests/stresstest.vcf -t 2 | grep -v "^#" > tests/stresstest.svscore.test.vcf
+./svscore.pl -o max,sum,top2weighted,top3weighted,meanweighted -dvc tests/dummyCADD.tsv.gz -i tests/stresstest.vcf | grep -v "^#" > tests/stresstest.svscore.test.vcf
 echo -e "\n\n\n\n\n********NA12878********"
 ./svscore.pl -dvwc tests/$1 -i tests/NA12878.sv.vcf | grep -v "^#" > tests/NA12878.sv.svscore.test.vcf
 echo -e "\n\n\n\n\n"
