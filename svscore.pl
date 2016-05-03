@@ -200,6 +200,8 @@ if ($inputfile) {
   if ($ops =~ /WEIGHTED/ && !(grep {/^##INFO=<ID=PRPOS,/} @oldheader)) { # If an op is weighted, but PRPOS is absent from the header, switch to unweighted operations with a warning
     warn "*****PRPOS not found in header - switching to unweighted operations*****\n";
     $ops =~ s/WEIGHTED//g;
+    @ops = uniq(split(/,/,$ops));
+    $ops = join(",",@ops);
     foreach my $op (keys %operations) {
       if ($op =~ /WEIGHTED/) {
 	my $value = $operations{$op};
@@ -208,6 +210,16 @@ if ($inputfile) {
 	$operations{$op} = $value;
       }
     }
+    # Close gaps in values(%operations) created by deleting entries
+    my %revops = reverse %operations; # $index => $operation
+    my $offset = 0; # Size of gap to close
+    my %newops;
+    foreach my $index (sort keys %revops) {
+      $offset++ unless $index == 0 || exists $revops{$index-1}; # Increase offset if there is a gap
+      $newops{$revops{$index}} = $index-$offset; # Close gap in %newops
+    }
+    %operations = %newops;
+#    die Dumper(%operations); ## DEBUG
   }
 
   my $headerline;
@@ -300,6 +312,7 @@ while (my $inputline = <IN>) {
     print OUT $inputline;
     next;
   }
+  #my ($probleft,$probright);
   my ($probleft,$probright) = getfields($info_a,"PRPOS","PREND") if $ops =~ /WEIGHTED/;
 
   # Get vcfanno annotations
@@ -319,17 +332,14 @@ while (my $inputline = <IN>) {
   my @leftgenenames = split(/\|/,$leftgenenames);
   my @rightgenenames = split(/\|/,$rightgenenames);
   
-  my @probleft = split(/,/,$probleft) if $probleft;
-  my @probright = split(/,/,$probright) if $probright;
-
   my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
   #if ($svtype eq "INS") {
   #  $scores{"LEFT"} = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-10, $leftstart, "", $topn);
   #  $scores{"RIGHT"} = cscoreop($caddfile, "", $ops, $leftchrom, $rightstop, $rightstop+10, "", $topn);
   #} else {
-  $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, \@probleft);
-  $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, \@probright);
+  $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
+  $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
   #}
 
   if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
@@ -370,7 +380,7 @@ while (my $inputline = <IN>) {
   # This is an ugly loop which transposes %scores so that the keys are operations, not intervals
   my %scoresbyop = ();
   foreach my $interval (sort {$intervals{$a} <=> $intervals{$b}} keys %scores) { # LEFT, RIGHT, (SPAN, LTRUNC, RTRUNC)
-    foreach my $op (@ops) { # MAX, SUM, TOP$topn, MEAN
+    foreach my $op (@ops) { # MAX, SUM, TOP\d, TOP\dWEIGHTED, MEAN, MEANWEIGHTED
       push @{$scoresbyop{$op}}, $scores{$interval}->[$operations{$op}];
     }
   }
@@ -441,14 +451,14 @@ unless ($debug) {
 
 sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. In VCF coordinates, $start is the base preceding the first possible breakpoint, and $stop is the base preceding the last possible breakpoint. In BED, $start is the first possible breakpoint, and $stop is the final possible breakpoint
   my ($filename, $ops, $chrom, $start, $stop, $prpos) = @_;
-  my @ops = split(/,/,$ops);
+  my @ops = uniq(split(/,/,$ops));
 #  pop @{$prpos} if $weight; ## TEMPORARY FIX - remove final element of @probdist to make length of @probdist equal to # of bases in interval
   my $weight = ($ops =~ /WEIGHTED/);
-  my @prpos = @{$prpos} if $weight;
-  if ($weight && !scalar @prpos) { ## Don't calculate scores if other scores are being weighted but this variant does not have a probability distribution
+  if ($weight && !$prpos) { ## Don't calculate scores if other scores are being weighted but this variant does not have a probability distribution
     my @res = (-1) x @ops;
     return \@res;
   }
+  my @prpos = split(/,/,$prpos) if $weight;
   my %probdist = () if $weight; # Hash of pdf for each position 
   if ($weight) {
     foreach my $i ($start..$stop) { # Populate %probdist
