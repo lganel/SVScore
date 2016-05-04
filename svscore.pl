@@ -25,8 +25,6 @@ getopts('dvc:g:e:m:o:p:i:',\%options);
 
 # Parse command line options, set variables, check input parameters
 my $debug = defined $options{'d'};
-#my $support = defined $options{'s'};
-#my $weight = defined $options{'w'};
 my $verbose = defined $options{'v'};
 
 &main::HELP_MESSAGE() && die unless defined $options{'i'};
@@ -44,7 +42,6 @@ die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
 $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
 my $ops = (defined $options{'o'} ? $options{'o'} : 'TOP10WEIGHTED');
-#my $topn = (defined $options{'t'} ? $options{'t'} : 100);
 my @ops = uniq(split(/,/,$ops));
 my %operations = (); # Hash of chosen operations
 foreach my $i (0..$#ops) { # Populate %operations with chosen operations given by -o
@@ -56,11 +53,7 @@ foreach my $i (0..$#ops) { # Populate %operations with chosen operations given b
   }
   $operations{$ops[$i]} = $i;
 }
-#my %operations = ($ops eq 'ALL' ? %possibleoperations : ($ops => 0)); # Hash of indices for each operation within lists in the values of %scores
-#if (defined $operations{"TOP"}) { # Replace "TOP" with "TOP$topn" in %operations keys 
-#  $operations{"TOP$topn"} = $operations{"TOP"};
-#  delete $operations{"TOP"};
-#}
+
 my $inputfile = (defined $options{'i'} ? $options{'i'} : "");
 my $compressed = ($inputfile =~ /\.gz$/);
 my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
@@ -219,7 +212,6 @@ if ($inputfile) {
       $newops{$revops{$index}} = $index-$offset; # Close gap in %newops
     }
     %operations = %newops;
-#    die Dumper(%operations); ## DEBUG
   }
 
   my $headerline;
@@ -265,15 +257,6 @@ if ($inputfile) {
 	push @newheader, "##INFO=<ID=SVSCORE${op}_RTRUNC,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores from beginning of right breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
       }
     }
-   
-#    if ($op =~ /^MEAN/) {
-#      push @newheader, "##INFO=<ID=SVSCOREMEAN,Number=1,Type=Float,Description=\"Maximum of SVSCORE_MEAN fields of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-#      push @newheader, "##INFO=<ID=SVSCOREMEAN_LEFT,Number=1,Type=Float,Description=\"Mean of C scores in left breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-#      push @newheader, "##INFO=<ID=SVSCOREMEAN_RIGHT,Number=1,Type=Float,Description=\"Mean of C scores in right breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-#      push @newheader, "##INFO=<ID=SVSCOREMEAN_SPAN,Number=1,Type=Float,Description=\"Mean of C scores in outer span of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-#      push @newheader, "##INFO=<ID=SVSCOREMEAN_LTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of left breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-#      push @newheader, "##INFO=<ID=SVSCOREMEAN_RTRUNC,Number=1,Type=Float,Description=\"Mean of C scores from beginning of right breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-#    }
   }
   push @newheader, @oldheader;
   foreach (uniq(@newheader)) {
@@ -312,7 +295,6 @@ while (my $inputline = <IN>) {
     print OUT $inputline;
     next;
   }
-  #my ($probleft,$probright);
   my ($probleft,$probright) = getfields($info_a,"PRPOS","PREND") if $ops =~ /WEIGHTED/;
 
   # Get vcfanno annotations
@@ -452,15 +434,9 @@ unless ($debug) {
 sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. In VCF coordinates, $start is the base preceding the first possible breakpoint, and $stop is the base preceding the last possible breakpoint. In BED, $start is the first possible breakpoint, and $stop is the final possible breakpoint
   my ($filename, $ops, $chrom, $start, $stop, $prpos) = @_;
   my @ops = uniq(split(/,/,$ops));
-#  pop @{$prpos} if $weight; ## TEMPORARY FIX - remove final element of @probdist to make length of @probdist equal to # of bases in interval
-  my $weight = ($ops =~ /WEIGHTED/);
-  if ($weight && !$prpos) { ## Don't calculate scores if other scores are being weighted but this variant does not have a probability distribution
-    my @res = (-1) x @ops;
-    return \@res;
-  }
-  my @prpos = split(/,/,$prpos) if $weight;
-  my %probdist = () if $weight; # Hash of pdf for each position 
-  if ($weight) {
+  my (@prpos,%probdist);
+  if ($ops =~ /WEIGHTED/ && $prpos) {
+    @prpos = split(/,/,$prpos);
     foreach my $i ($start..$stop) { # Populate %probdist
       $probdist{$i} = $prpos[$i-$start];
     }
@@ -470,8 +446,6 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   my $stopinc = $stop+1; ## Increment end coordinate for tabix so that we capture the CADD score for the base following the interval to allow for calculation of a score for the final possible breakpoint
   my $tabixoutput = `tabix $filename $chrom:$start-$stopinc`;
   my @tabixoutputlines = split(/\n/,$tabixoutput);
-#  print STDERR "$chrom:$start-$stop\n"; ## DEBUG
-#  print STDERR Dumper(keys %probdist),"\n"; ## DEBUG
   
   my %basescores = (); # Hash from VCF position to list of scores for each position
   foreach my $line (@tabixoutputlines) { # Populate %basescores with tabix output
@@ -479,7 +453,6 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
     push @{$basescores{$split[1]}}, $split[5];
   }
   foreach my $pos (sort {$a <=> $b} keys %basescores) { # Replace values in %basescores with max score at each VCF position
-#    push @basemaxscores, max(@{$basescores{$pos}});
     $basescores{$pos} = max(@{$basescores{$pos}});
     if (exists $basescores{$pos-1}) { # Calculate all scores for possible breakpoints by averaging the base scores of the two flanking bases of the possible breakpoint. Place scores in %bptscores
       $bptscores{$pos-1} = ($basescores{$pos-1} + $basescores{$pos}) / 2;
@@ -487,32 +460,18 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
     }
   }
 
-#  print STDERR "\n$chrom:$start-$stop"; ## DEBUG
   unless (@tabixoutputlines && %bptscores) { # Short circuit if interval does not have enough base scores to calculate breakpoint scores (i.e. there are no 2 consecutive bases with scores in the interval)
     my @res = (-1) x @ops;
     return \@res; 
   }
-#  if ($weight && scalar(keys %bptscores) != @probdist) { # If weighting with probdist, but C scores are not available for the entire interval, trim %probdist to contain only those BED positions which have possible breakpoint scores (i.e. base scores for two flanking bases are available)
-##    my @newprobdist = ();
-##    foreach my $pos (sort {$a <=> $b} keys %basescores) { # Get probability of positions in interval that have C scores, collect in @newprobdist
-##      push @newprobdist,$probdist{$pos};
-##    }
-##    @probdist = @newprobdist; # Replace @probdist
-#    for my $pos (keys %probdist) { # Get rid of probabilities for any possible breakpoint position without a score
-#      delete $probdist{$pos} unless exists $bptscores{$pos};
-#    }
-#  }
-
-#  print STDERR "Scores: ",join(", ",@basemaxscores),"\n"; ## DEBUG
-#  print STDERR "PRPOS: ",join(", ",@probdist),"\n" if $weight; ## DEBUG
 
   my (@bptscores,@probdist,@weightedbptscores) = ();
   foreach my $pos (sort {$a <=> $b} keys %bptscores) { # Collapse %bptscores and %probdist into arrays, getting rid of positions in %probdist with no corresponding possible breakpoint scores
     push @bptscores, $bptscores{$pos};
-    push @probdist, $probdist{$pos} if $weight;
+    push @probdist, $probdist{$pos} if $prpos;
   }
 
-  if ($weight) { # Rescale probability distribution to add up to 1 and weight @bptscores
+  if ($prpos) { # Rescale probability distribution to add up to 1 and weight @bptscores
     my $sumprobs = sum(@probdist);
     unless ($sumprobs == 1) {
       foreach my $i (0..$#probdist) {
@@ -522,11 +481,11 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
     @weightedbptscores = pairwise {$a * $b} @bptscores, @probdist;
   }
 
-#  print STDERR "\t\t\t@bptscores\n"; ## DEBUG
-
-#    print STDERR "Probdist after normalization: ",join(',',@probdist),"\n"; ## DEBUG
-#  print STDERR "Newscores: ",join(", ",@bptscores),"\n"; ## DEBUG
   foreach my $op (@ops) {
+    if ($op =~ /WEIGHTED/ && !$prpos) { ## Don't calculate scores for weighted ops if PRPOS is absent
+      push @{$res}, -1;
+      next;
+    }
     my $scoresref = ($op =~ /WEIGHTED/ ? \@weightedbptscores : \@bptscores); # Use a reference to avoid copying arrays
     my $newscore;
 
@@ -609,7 +568,7 @@ sub replaceoraddfield {
 }
 
 sub main::HELP_MESSAGE() {
-  print STDERR "usage: ./svscore.pl [-dsvw] [-o op] [-t topnumber] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] -i vcf
+  print STDERR "usage: ./svscore.pl [-dv] [-o op] [-t topnumber] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] -i vcf
     -i	      Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use \"-i stdin\" if using standard input
     -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
