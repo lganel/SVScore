@@ -47,7 +47,7 @@ my %operations = (); # Hash of chosen operations
 foreach my $i (0..$#ops) { # Populate %operations with chosen operations given by -o
   my $op = $ops[$i];
   $op =~ s/\d+//g; # Get rid of all numbers in $op for lookup in %possibleoperations
-  unless (defined $possibleoperations{$op}) {
+  unless (defined $possibleoperations{$op} && ($ops[$i] !~ /TOP/ || $ops[$i] =~ /^TOP\d/)) { ## Make sure all operations are recognized (and that all TOP operations have a number)
     warn "Unrecognized operation specified: $ops[$i]\n";
     &main::HELP_MESSAGE() && die;
   }
@@ -435,7 +435,8 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   my ($filename, $ops, $chrom, $start, $stop, $prpos) = @_;
   my @ops = uniq(split(/,/,$ops));
   my (@prpos,%probdist);
-  if ($ops =~ /WEIGHTED/ && $prpos) {
+  my $weight = ($ops =~ /WEIGHTED/ && $prpos);
+  if ($weight) {
     @prpos = split(/,/,$prpos);
     foreach my $i ($start..$stop) { # Populate %probdist
       $probdist{$i} = $prpos[$i-$start];
@@ -468,39 +469,46 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   my (@bptscores,@probdist,@weightedbptscores) = ();
   foreach my $pos (sort {$a <=> $b} keys %bptscores) { # Collapse %bptscores and %probdist into arrays, getting rid of positions in %probdist with no corresponding possible breakpoint scores
     push @bptscores, $bptscores{$pos};
-    push @probdist, $probdist{$pos} if $prpos;
+    push @probdist, $probdist{$pos} if $weight;
   }
 
-  if ($prpos) { # Rescale probability distribution to add up to 1 and weight @bptscores
-    my $sumprobs = sum(@probdist);
-    unless ($sumprobs == 1) {
-      foreach my $i (0..$#probdist) {
-	$probdist[$i] = $probdist[$i] / $sumprobs;
-      }
-    }
+  if ($weight) { # Rescale probability distribution to add up to 1 (to account for excluded bases with no C scores or faulty PRPOS annotation) and weight @bptscores
+    my $normref = normalize(\@probdist);
+    @probdist = @{$normref};
     @weightedbptscores = pairwise {$a * $b} @bptscores, @probdist;
   }
 
-  foreach my $op (@ops) {
-    if ($op =~ /WEIGHTED/ && !$prpos) { ## Don't calculate scores for weighted ops if PRPOS is absent
+  foreach my $op (@ops) { ## Loop through all operations in @ops, appending the resulting score to @res
+    my $weightedop = ($op =~ /WEIGHTED/);
+    if ($weightedop && !$prpos) { ## Don't calculate scores for weighted ops if PRPOS is absent
       push @{$res}, -1;
       next;
     }
-    my $scoresref = ($op =~ /WEIGHTED/ ? \@weightedbptscores : \@bptscores); # Use a reference to avoid copying arrays
-    my $newscore;
 
+    my $scoresref = ($weightedop ? \@weightedbptscores : \@bptscores); # Use a reference to avoid copying arrays.
     if ($op =~ /^TOP(\d+)/) {
-      my $topn = min($1, scalar @{$scoresref});
-      my @topn = (sort {$b <=> $a} @{$scoresref})[0..$topn-1];
-      $scoresref = \@topn;
+      my @scores = @{$scoresref};
+      my $topn = min($1, scalar @scores);
+      my @topnindices = (sort {$scores[$b] <=> $scores[$a]} (0..$#scores))[0..$topn-1]; # Get indices of the greatest $topn positions in @scores. These represent the positions with the highest (product of probability and) breakpoint scores
+      my @topnscores = @bptscores[@topnindices]; # Capture unweighted scores of $topn possible breakpoints in interval
+
+      if ($weightedop) {
+	my @topnprobdist = @probdist[@topnindices];
+	# Rescale probability distribution to add up to 1 and weight @bptscores
+	my $topnnormref = normalize(\@topnprobdist);
+	@topnprobdist = @{$topnnormref};
+	@topnscores = pairwise {$a * $b} @topnscores, @topnprobdist;
+      }
+      $scoresref = \@topnscores;
     }
 
+    my $newscore;
     my @scores = @{$scoresref};
     if ($op eq "MAX") {
       $newscore = nearest(0.001,max(@scores));
-    } elsif ($op eq "SUM" || ($op =~ /WEIGHTED$/ && $prpos)) { # Compute sum of @scores if $op is SUM, or if the op is weighted and we're on a breakend, in which case, @scores is @weightedbptscores (or a subset of it in the TOP case), so the sum of @scores is the weighted mean of @bptscores (or of the subset, if $op begins with TOP)
+    } elsif ($op eq "SUM" || ($weightedop && $prpos)) { # Compute sum of @scores if $op is SUM, or if the op is weighted and we're on a breakend, in which case, @scores is @weightedbptscores (or a subset of it in the TOP case), so the sum of @scores is the weighted mean of @bptscores (or of the subset, if $op begins with TOP)
       $newscore = nearest(0.001,sum(@scores));
-    } elsif ($op eq "MEAN" || $op =~ /^TOP\d+/ || ($op =~ /WEIGHTED$/ && !$prpos)) { # Compute mean of @scores if $op is MEAN or TOP, or if $op is MEANWEIGHTED or TOP\d+WEIGHTED and we're on the span/truncation score
+    } elsif ($op eq "MEAN" || $op =~ /^TOP\d+/ || ($weightedop && !$prpos)) { # Compute mean of @scores if $op is MEAN or TOP, or if $op is MEANWEIGHTED or TOP\d+WEIGHTED and we're on the span/truncation score
       $newscore = nearest(0.001,sum(@scores)/scalar(@scores));
     } else {
       die "Error: Unrecognized operation: $op"
@@ -508,6 +516,17 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
     push @{$res}, $newscore;
   }
   return $res;
+}
+
+sub normalize { # Given an array reference, normalize the array so it sums to 1 and return a reference to the array
+  my @ls = @{$_[0]};
+  my $sum = sum(@ls);
+  unless ($sum == 1) {
+    foreach (0..$#ls) {
+      $ls[$_] = $ls[$_] / $sum;
+    }
+  }
+  return \@ls;
 }
 
 sub getfields { # Parse info field of VCF line, getting fields specified in @_. $_[0] must be the info field itself. Returns list of field values if more than one field is being requested; otherwise, returns a scalar value representing the requested field
