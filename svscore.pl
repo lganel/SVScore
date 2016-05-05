@@ -148,7 +148,7 @@ close CONFIG;
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
 my ($prefix,$tempfile);
 my $time = gettimeofday();
-if ($inputfile eq "stdin") {
+if ($inputfile eq "stdin") { # Write standard input to temp file if input file comes from STDIN
   $tempfile = "svscoretmp/stdin$time.vcf";
   unless(open(TEMP,">$tempfile")) {
     deletesvscoretmp();
@@ -165,9 +165,23 @@ if ($inputfile eq "stdin") {
 } else {
   ($prefix) = ($inputfile =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
 }
+
+# Make sure header is present in input file
+unless(open(HEADERCHECK, "< $inputfile")) {
+  deletesvscoretmp();
+  die "Could not open $inputfile: $!";
+}
+my $firstline = <HEADERCHECK>;
+close HEADERCHECK;
+unless($firstline =~ /^#/) {
+  unlink $inputfile;
+  deletesvscoretmp();
+  die "***Missing header on input file";
+}
+
 # Tag intermediate files with timestamp to avoid collisions
 $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
-my $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
+$sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
 if ($compressed) {
   if (system("gunzip -c $inputfile > svscoretmp/$prefix$time.vcf")) {
     deletesvscoretmp();
