@@ -54,7 +54,7 @@ foreach my $i (0..$#ops) { # Populate %operations with chosen operations given b
   $operations{$ops[$i]} = $i;
 }
 
-my $inputfile = (defined $options{'i'} ? $options{'i'} : "");
+my $inputfile  = $options{'i'};
 my $compressed = ($inputfile =~ /\.gz$/);
 my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
 
@@ -138,7 +138,10 @@ chomp $intronnumcolumn;
 
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
-open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!";
+unless (open(CONFIG, "> conf.toml")) {
+  deletesvscoretmp();
+  die "Could not open conf.toml: $!";
+}
 print CONFIG "[[annotation]]\nfile=\"$compressedgenefile\"\nnames=[\"Gene\"]\ncolumns=[$geneanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\",\"IntronGene\"]\ncolumns=[$intronnumcolumn,4]\nops=[\"uniq\",\"uniq\"]\n";
 close CONFIG;
 
@@ -147,127 +150,141 @@ my ($prefix,$tempfile);
 my $time = gettimeofday();
 if ($inputfile eq "stdin") {
   $tempfile = "svscoretmp/stdin$time.vcf";
-  open(TEMP,">$tempfile") || die "Could not open $tempfile for writing; $!";
+  unless(open(TEMP,">$tempfile")) {
+    deletesvscoretmp();
+    die "Could not open $tempfile for writing; $!";
+  }
   print TEMP <STDIN>;
   close TEMP;
 }
 
-if ($inputfile) {
-  print STDERR "Preparing preprocessing command\n" if $debug;
-  if ($inputfile eq "stdin") {
-    $prefix = "stdin";
-    $inputfile = $tempfile;
+print STDERR "Preparing preprocessing command\n" if $debug;
+if ($inputfile eq "stdin") {
+  $prefix = "stdin";
+  $inputfile = $tempfile;
+} else {
+  ($prefix) = ($inputfile =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
+}
+# Tag intermediate files with timestamp to avoid collisions
+$preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
+my $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
+if ($compressed) {
+  if (system("gunzip -c $inputfile > svscoretmp/$prefix$time.vcf")) {
+    deletesvscoretmp();
+    die "Could not unzip $inputfile: $!";
   } else {
-    ($prefix) = ($inputfile =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
-  }
-  # Tag intermediate files with timestamp to avoid collisions
-  $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
-  my $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
-  my $reorderout = "svscoretmp/$prefix$time.reorderheaderout.vcf";
-  if ($compressed) {
-    system("gunzip -c $inputfile > svscoretmp/$prefix$time.vcf") && die "Could not unzip $inputfile: $!";
     $inputfile = "svscoretmp/$prefix$time.vcf";
   }
-  my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile > $reorderout"; # Sort, annotate, reorder header
-  my $preprocess2 = "svtools vcftobedpe -i $reorderout > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi $reorderout";
-  print STDERR "Preprocessing commands:\n$preprocess\n$preprocess2\n" if $debug;
-  if (system($preprocess) || system($preprocess2) || -z $preprocessedfile) {
-    unless ($debug) {
-      unlink $preprocessedfile;
-      rmdir "svscoretmp";
+}
+my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile | svtools vcftobedpe > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi"; # Sort, annotate, reorder header, convert to BEDPE
+print STDERR "Preprocessing command:\n$preprocess\n" if $debug;
+if (system($preprocess) || -z $preprocessedfile) {
+  unless ($debug) {
+    unlink $preprocessedfile,$sortedfile;
+    deletesvscoretmp();
+  }
+  die "Preprocessing failed: $!"
+}
+
+$bedpeout = "svscoretmp/$prefix$time.out.bedpe";
+$vcfout = "svscoretmp/$prefix$time.out.vcf";
+unless(open(IN, "< $preprocessedfile")) {
+  deletesvscoretmp();
+  die "Could not open $preprocessedfile: $!";
+}
+unless(open(OUT, "> $bedpeout")) {
+  deletesvscoretmp();
+  die "Could not open output file: $!";
+}
+
+# Update header
+unless(open(HEADER, "grep \"^#\" $preprocessedfile |")) {
+  deletesvscoretmp();
+  die "Error grabbing header: $!";
+}
+my @newheader = ();
+my @oldheader = <HEADER>;
+close HEADER;
+
+if ($ops =~ /WEIGHTED/ && !(grep {/^##INFO=<ID=PRPOS,/} @oldheader)) { # If an op is weighted, but PRPOS is absent from the header, switch to unweighted operations with a warning
+  warn "*****PRPOS not found in header - switching to unweighted operations*****\n";
+  $ops =~ s/WEIGHTED//g;
+  @ops = uniq(split(/,/,$ops));
+  $ops = join(",",@ops);
+  foreach my $op (keys %operations) {
+    if ($op =~ /WEIGHTED/) {
+      my $value = $operations{$op};
+      delete $operations{$op};
+      $op =~ s/WEIGHTED//;
+      $operations{$op} = $value;
     }
-    die "Preprocessing failed: $!"
   }
-
-  $bedpeout = "svscoretmp/$prefix$time.out.bedpe";
-  $vcfout = "svscoretmp/$prefix$time.out.vcf";
-  open(IN, "< $preprocessedfile") || die "Could not open $preprocessedfile: $!";
-  open(OUT, "> $bedpeout") || die "Could not open output file: $!";
-
-  # Update header
-  open(HEADER, "grep \"^#\" $preprocessedfile |") || die "Error grabbing header: $!";
-  my @newheader = ();
-  my @oldheader = <HEADER>;
-  close HEADER;
-
-  if ($ops =~ /WEIGHTED/ && !(grep {/^##INFO=<ID=PRPOS,/} @oldheader)) { # If an op is weighted, but PRPOS is absent from the header, switch to unweighted operations with a warning
-    warn "*****PRPOS not found in header - switching to unweighted operations*****\n";
-    $ops =~ s/WEIGHTED//g;
-    @ops = uniq(split(/,/,$ops));
-    $ops = join(",",@ops);
-    foreach my $op (keys %operations) {
-      if ($op =~ /WEIGHTED/) {
-	my $value = $operations{$op};
-	delete $operations{$op};
-	$op =~ s/WEIGHTED//;
-	$operations{$op} = $value;
-      }
-    }
-    # Close gaps in values(%operations) created by deleting entries
-    my %revops = reverse %operations; # $index => $operation
-    my $offset = 0; # Size of gap to close
-    my %newops;
-    foreach my $index (sort keys %revops) {
-      $offset++ unless $index == 0 || exists $revops{$index-1}; # Increase offset if there is a gap
-      $newops{$revops{$index}} = $index-$offset; # Close gap in %newops
-    }
-    %operations = %newops;
+  # Close gaps in values(%operations) created by deleting entries
+  my %revops = reverse %operations; # $index => $operation
+  my $offset = 0; # Size of gap to close
+  my %newops;
+  foreach my $index (sort keys %revops) {
+    $offset++ unless $index == 0 || exists $revops{$index-1}; # Increase offset if there is a gap
+    $newops{$revops{$index}} = $index-$offset; # Close gap in %newops
   }
+  %operations = %newops;
+}
 
-  my $headerline;
-  while(($headerline = (shift @oldheader)) !~ /^##INFO/) {
-    push @newheader, $headerline;
-  }
-  unshift @oldheader, $headerline; # Return first info line to top of stack
-  while(($headerline = (shift @oldheader)) =~ /^##INFO/) {
-    push @newheader, $headerline;
-  }
-  unshift @oldheader, $headerline; # Return first format line to top of stack
+my $headerline;
+while(($headerline = (shift @oldheader)) !~ /^##INFO/) {
+  push @newheader, $headerline;
+}
+unshift @oldheader, $headerline; # Return first info line to top of stack
+while(($headerline = (shift @oldheader)) =~ /^##INFO/) {
+  push @newheader, $headerline;
+}
+unshift @oldheader, $headerline; # Return first format line to top of stack
 
-  if (defined $operations{"MAX"}) {
-    push @newheader, "##INFO=<ID=SVSCOREMAX,Number=1,Type=Float,Description=\"Maximum of SVSCOREMAX fields of structural variant\">\n";
+if (defined $operations{"MAX"}) {
+  push @newheader, "##INFO=<ID=SVSCOREMAX,Number=1,Type=Float,Description=\"Maximum of SVSCOREMAX fields of structural variant\">\n";
+  if ($verbose) {
+    push @newheader, "##INFO=<ID=SVSCOREMAX_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant\">\n";
+    push @newheader, "##INFO=<ID=SVSCOREMAX_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant\">\n";
+    push @newheader, "##INFO=<ID=SVSCOREMAX_SPAN,Number=1,Type=Float,Description=\"Maximum C score in span of structural variant\">\n";
+    push @newheader, "##INFO=<ID=SVSCOREMAX_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of truncated gene\">\n";
+    push @newheader, "##INFO=<ID=SVSCOREMAX_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of truncated gene\">\n";
+  }
+}
+if (defined $operations{"SUM"}) {
+  push @newheader, "##INFO=<ID=SVSCORESUM,Number=1,Type=Float,Description=\"Maximum of SVSCORESUM fields of structural variant\">\n";
+  if ($verbose) {
+    push @newheader, "##INFO=<ID=SVSCORESUM_LEFT,Number=1,Type=Float,Description=\"Sum of C scores in left breakend of structural variant\">\n";
+    push @newheader, "##INFO=<ID=SVSCORESUM_RIGHT,Number=1,Type=Float,Description=\"Sum of C scores in right breakend of structural variant\">\n";
+    push @newheader, "##INFO=<ID=SVSCORESUM_SPAN,Number=1,Type=Float,Description=\"Sum of C scores in outer span of structural variant\">\n";
+    push @newheader, "##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of truncated gene\">\n";
+    push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of truncated gene\">\n";
+  }
+}
+foreach my $op (@ops) {
+  my $weighted = ($op =~ /WEIGHTED$/);
+  my ($n) = ($op =~ /^TOP(\d+)/);
+  if ($op =~ /^TOP\d+/ || $op =~ /^MEAN/) {
+    push @newheader, "##INFO=<ID=SVSCORE$op,Number=1,Type=Float,Description=\"Maximum of SVSCORE$op fields of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
     if ($verbose) {
-      push @newheader, "##INFO=<ID=SVSCOREMAX_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant\">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMAX_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant\">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMAX_SPAN,Number=1,Type=Float,Description=\"Maximum C score in span of structural variant\">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMAX_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of truncated gene\">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMAX_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of truncated gene\">\n";
+      push @newheader, "##INFO=<ID=SVSCORE${op}_LEFT,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores in left breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORE${op}_RIGHT,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores in right breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORE${op}_SPAN,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores in outer span of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORE${op}_LTRUNC,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores from beginning of left breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+      push @newheader, "##INFO=<ID=SVSCORE${op}_RTRUNC,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores from beginning of right breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
     }
   }
-  if (defined $operations{"SUM"}) {
-    push @newheader, "##INFO=<ID=SVSCORESUM,Number=1,Type=Float,Description=\"Maximum of SVSCORESUM fields of structural variant\">\n";
-    if ($verbose) {
-      push @newheader, "##INFO=<ID=SVSCORESUM_LEFT,Number=1,Type=Float,Description=\"Sum of C scores in left breakend of structural variant\">\n";
-      push @newheader, "##INFO=<ID=SVSCORESUM_RIGHT,Number=1,Type=Float,Description=\"Sum of C scores in right breakend of structural variant\">\n";
-      push @newheader, "##INFO=<ID=SVSCORESUM_SPAN,Number=1,Type=Float,Description=\"Sum of C scores in outer span of structural variant\">\n";
-      push @newheader, "##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of truncated gene\">\n";
-      push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of truncated gene\">\n";
-    }
-  }
-  foreach my $op (@ops) {
-    my $weighted = ($op =~ /WEIGHTED$/);
-    my ($n) = ($op =~ /^TOP(\d+)/);
-    if ($op =~ /^TOP\d+/ || $op =~ /^MEAN/) {
-      push @newheader, "##INFO=<ID=SVSCORE$op,Number=1,Type=Float,Description=\"Maximum of SVSCORE$op fields of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-      if ($verbose) {
-	push @newheader, "##INFO=<ID=SVSCORE${op}_LEFT,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores in left breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-	push @newheader, "##INFO=<ID=SVSCORE${op}_RIGHT,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores in right breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-	push @newheader, "##INFO=<ID=SVSCORE${op}_SPAN,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores in outer span of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-	push @newheader, "##INFO=<ID=SVSCORE${op}_LTRUNC,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores from beginning of left breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-	push @newheader, "##INFO=<ID=SVSCORE${op}_RTRUNC,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores from beginning of right breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-      }
-    }
-  }
-  push @newheader, @oldheader;
-  foreach (uniq(@newheader)) {
-    print OUT;
-  }
-
+}
+push @newheader, @oldheader;
+foreach (uniq(@newheader)) {
+  print OUT;
 }
 
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
-open(GENES, "$uncompressedgenefile") || die "Could not open $genefile: $!";
+unless(open(GENES, "$uncompressedgenefile")) {
+  deletesvscoretmp();
+  die "Could not open $genefile: $!";
+}
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found  (coordinates are 1-based)
   my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = (split(/\s+/,$geneline))[0..2,$geneanncolumn-1,$genestrandcolumn-1];
   $genestart++; ## Move interval to 1-based (VCF) coordinates (don't correct $genestop because BED intervals are non-inclusive of end position, so corrections cancel out)
@@ -416,18 +433,7 @@ unless ($debug) {
     }
   }
 
-  # Delete svscoretmp if empty
-  opendir(DIR,"svscoretmp");
-  my @dir = readdir(DIR);
-  my $dircount = @dir;
-  foreach (@dir) {
-    $dircount-- if ($_ eq '.' || $_ eq '..');
-  }
-  if ($dircount == 0) {
-    if(system("rmdir svscoretmp")) {
-      warn "Could not delete svscoretmp: $!";
-    }
-  }
+  deletesvscoretmp();
   closedir(DIR);
 }
 
@@ -584,6 +590,20 @@ sub replaceoraddfield {
     $info .= (";$field=$newscore");
   }
   return $info;
+}
+
+sub deletesvscoretmp { # Delete svscoretmp if empty
+  opendir(DIR,"svscoretmp");
+  my @dir = readdir(DIR);
+  my $dircount = @dir;
+  foreach (@dir) {
+    $dircount-- if ($_ eq '.' || $_ eq '..');
+  }
+  if ($dircount == 0) {
+    if(system("rmdir svscoretmp")) {
+      warn "Could not delete svscoretmp: $!";
+    }
+  }
 }
 
 sub main::HELP_MESSAGE() {
