@@ -5,7 +5,7 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-echo -e "********Testing SVScore. Some warnings beginning with \"Warning: missing secondary multiline variant at ID:\" are normal********\n\n\n"
+echo -e "********Testing SVScore. Some warnings beginning with \"Warning: missing secondary multiline variant at ID:\" are normal********\n\n"
 
 ## Strip header from truth set
 grep -v "^#" NA12878.sv.svscore.vcf > NA12878.sv.svscore.noheader.vcf
@@ -14,10 +14,10 @@ grep -v "^#" stresstest.svscore.vcf > stresstest.svscore.noheader.vcf
 # Perform stress test
 cd ..
 echo "********Stress Test********"
-./svscore.pl -o max,sum,top2weighted,top3weighted,meanweighted -dvc tests/dummyCADD.tsv.gz -i tests/stresstest.vcf | grep -v "^#" > tests/stresstest.svscore.test.vcf
-echo -e "\n\n\n\n\n********NA12878********"
-./svscore.pl -dvwc tests/$1 -i tests/NA12878.sv.vcf | grep -v "^#" > tests/NA12878.sv.svscore.test.vcf
-echo -e "\n\n\n\n\n"
+./svscore.pl -o max,sum,top2,top2weighted,top3weighted,top4weighted,mean,meanweighted -dvc tests/dummyCADD.tsv.gz -i tests/stresstest.vcf | grep -v "^#" > tests/stresstest.svscore.test.vcf
+echo -e "\n\n********NA12878********"
+./svscore.pl -o max,sum,top5,top10,mean -dvc tests/$1 -i tests/NA12878.sv.vcf | grep -v "^#" > tests/NA12878.sv.svscore.test.vcf
+echo -e "\n\n"
 cd tests
 
 diff stresstest.svscore.test.vcf stresstest.svscore.noheader.vcf > stresstest.diff
