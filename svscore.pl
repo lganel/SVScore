@@ -348,8 +348,8 @@ while (my $inputline = <IN>) {
   my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
   #if ($svtype eq "INS") {
-  #  $scores{"LEFT"} = cscoreop($caddfile, "", $ops, $leftchrom, $leftstart-10, $leftstart, "", $topn);
-  #  $scores{"RIGHT"} = cscoreop($caddfile, "", $ops, $leftchrom, $rightstop, $rightstop+10, "", $topn);
+  #  $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart-10, $leftstart, -1);
+  #  $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstop, $rightstop+10, -1);
   #} else {
   $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
   $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
@@ -360,7 +360,7 @@ while (my $inputline = <IN>) {
     if ($rightstop - $leftstart > 1000000) {
       $scores{"SPAN"} = (100) x @ops;
     } else {
-      $scores{"SPAN"} = cscoreop($caddfile, $ops, $leftchrom, $pos, $end, "");
+      $scores{"SPAN"} = cscoreop($caddfile, $ops, $leftchrom, $pos, $end, -1);
     }
   }
 
@@ -451,11 +451,11 @@ unless ($debug) {
   closedir(DIR);
 }
 
-sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. In VCF coordinates, $start is the base preceding the first possible breakpoint, and $stop is the base preceding the last possible breakpoint. In BED, $start is the first possible breakpoint, and $stop is the final possible breakpoint
+sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. In VCF coordinates, $start is the base preceding the first possible breakpoint, and $stop is the base preceding the last possible breakpoint. In BED, $start is the first possible breakpoint, and $stop is the final possible breakpoint. cscoreop will return -1 for any weighted operation on a variant without a PRPOS field. Giving -1 as $prpos signifies that scores should not be weighted (i.e. the score is a span/truncation score), while giving "" as $prpos signifies that the variant has no PRPOS field
   my ($filename, $ops, $chrom, $start, $stop, $prpos) = @_;
   my @ops = uniq(split(/,/,$ops));
   my (@prpos,%probdist);
-  my $weight = ($ops =~ /WEIGHTED/ && $prpos);
+  my $weight = ($ops =~ /WEIGHTED/ && $prpos && $prpos ne -1);
   if ($weight) {
     @prpos = split(/,/,$prpos);
     foreach my $i ($start..$stop) { # Populate %probdist
@@ -499,7 +499,7 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   }
 
   foreach my $op (@ops) { ## Loop through all operations in @ops, appending the resulting score to @res
-    my $weightedop = ($op =~ /WEIGHTED/);
+    my $weightedop = ($op =~ /WEIGHTED/ && $prpos ne -1);
     if ($weightedop && !$prpos) { ## Don't calculate scores for weighted ops if PRPOS is absent
       push @{$res}, -1;
       next;
@@ -526,11 +526,12 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
     my @scores = @{$scoresref};
     if ($op eq "MAX") {
       $newscore = nearest(0.001,max(@scores));
-    } elsif ($op eq "SUM" || ($weightedop && $prpos)) { # Compute sum of @scores if $op is SUM, or if the op is weighted and we're on a breakend, in which case, @scores is @weightedbptscores (or a subset of it in the TOP case), so the sum of @scores is the weighted mean of @bptscores (or of the subset, if $op begins with TOP)
+    } elsif ($op eq "SUM" || $weightedop) { # Compute sum of @scores if $op is SUM, or if the op is weighted and we're on a breakend, in which case, @scores is @weightedbptscores (or a subset of it in the TOP case), so the sum of @scores is the weighted mean of @bptscores (or of the subset, if $op begins with TOP)
       $newscore = nearest(0.001,sum(@scores));
-    } elsif ($op eq "MEAN" || $op =~ /^TOP\d+/ || ($weightedop && !$prpos)) { # Compute mean of @scores if $op is MEAN or TOP, or if $op is MEANWEIGHTED or TOP\d+WEIGHTED and we're on the span/truncation score
+    } elsif ($op eq "MEAN" || $op =~ /^TOP\d+$/ || ($op =~ /WEIGHTED/ && $prpos eq -1)) { # Compute mean of @scores if $op is MEAN or TOP, or if $op is MEANWEIGHTED or TOP\d+WEIGHTED and we're on the span/truncation score
       $newscore = nearest(0.001,sum(@scores)/scalar(@scores));
     } else {
+      print STDERR "Weightedop: $weightedop\nPRPOS: $prpos\nOP: $op\n"; ## DEBUG
       die "Error: Unrecognized operation: $op"
     }
     push @{$res}, $newscore;
@@ -575,9 +576,9 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
     my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$chrom}}[0..2];	
     my $cscoreopres;
     if ($genestrand eq '+') {
-      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, max($genestart,$start),$genestop, ""); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+      $cscoreopres = cscoreop($caddfile, $ops, $chrom, max($genestart,$start),$genestop, -1); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
     } else {
-      $cscoreopres = cscoreop($caddfile, "", $ops, $chrom, $genestart,min($genestop,$stop), ""); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
+      $cscoreopres = cscoreop($caddfile, $ops, $chrom, $genestart,min($genestop,$stop), -1); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
     }
     foreach my $op (keys %operations) {
       push @{$truncationscores{$op}}, $cscoreopres->[$operations{$op}];
