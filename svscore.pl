@@ -347,13 +347,13 @@ while (my $inputline = <IN>) {
   
   my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
-  #if ($svtype eq "INS") {
-  #  $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart-10, $leftstart, -1);
-  #  $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstop, $rightstop+10, -1);
-  #} else {
-  $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
-  $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
-  #}
+  if ($svtype eq "INS") {
+    $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart-10, $leftstart, -1);
+    $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstop, $rightstop+10, -1);
+  } else {
+    $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
+    $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
+  }
 
   if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
     my ($pos,$end) = getfields($info_a,"POS","END");
