@@ -21,7 +21,7 @@ my %truncationtypes = ("INV","TRX","INS","DEL"); # All svtypes for which truncat
 my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
 my %options = ();
-getopts('dvc:g:e:m:o:p:i:',\%options);
+getopts('dvc:g:e:m:o:p:i:n:',\%options);
 
 # Parse command line options, set variables, check input parameters
 my $debug = defined $options{'d'};
@@ -32,14 +32,15 @@ my $verbose = defined $options{'v'};
 my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
 die "Could not find $caddfile" unless -s $caddfile;
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed.gz');
-my $geneanncolumn = (defined $options{'m'} && defined $options{'g'} ? $options{'m'} : 4);
-$geneanncolumn = 4 && warn "Gene annotation column provided without nonstandard gene annotation file - defaulting to standard gene annotation column (4)" if defined $options{'m'} && !defined $options{'g'};
+my $geneanncolumn = (defined $options{'m'} ? $options{'m'} : 4);
 $geneanncolumn = 4 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)" if $geneanncolumn <= 3;
 my $genestrandcolumn = (defined $options{'p'} ? $options{'p'} : 5);
 $genestrandcolumn = 5 && warn "Gene strand column provided without nonstandard gene annotation file - defaulting to standard gene strand column (5)" if defined $options{'m'} && !defined $options{'g'};
 $genestrandcolumn = 5 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene strand column (5)" if $genestrandcolumn <= 3;
 die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==$genestrandcolumn;
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
+my $exonanncolumn = (defined $options{'n'} ? $options{'n'} : 4);
+$exonanncolumn = 4 && warn "Exon annotation column must be greater than 3 - defaulting to standard exon annotation column (4)" if $exonanncolumn <= 3;
 $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
 my $ops = (defined $options{'o'} ? $options{'o'} : 'TOP10WEIGHTED');
 my @ops = uniq(split(/,/,$ops));
@@ -56,7 +57,7 @@ foreach my $i (0..$#ops) { # Populate %operations with chosen operations given b
 
 my $inputfile  = $options{'i'};
 my $compressed = ($inputfile =~ /\.gz$/);
-my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
+my ($uncompressedgenefile, $compressedgenefile, $uncompressedexonfile, $compressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
 
 # Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary
 if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
@@ -68,7 +69,7 @@ if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon fil
 
 my ($geneprefix) = ($genefile =~ /^(?:.*\/)?(.*)\.bed(?:\.gz)?$/);
 my ($exonprefix) = ($exonfile =~ /^(?:.*\/)?(.*)\.bed(?:\.gz)?$/);
-my $intronfile = "introns.$geneprefix.$exonprefix.bed.gz";
+my $intronfile = "svscoretmp/introns.$geneprefix.$exonprefix.bed.gz";
 if ($genefile eq 'refGene.genes.b37.bed.gz' && !-s $genefile && !-s $intronfile) { # Generate gene file if necessary
   print STDERR "Generating gene file: $genefile\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$13,\$4}' OFS=\"\\t\" | sort -k 1,1V -k 2,2n | uniq | bgzip -c > refGene.genes.b37.bed.gz");
@@ -110,6 +111,14 @@ if ($exonfile =~ /\.gz/) {
   }
 } else {
   $uncompressedexonfile = $exonfile;
+  $compressedexonfile = "$exonfile.gz";
+  unless(-s $compressedexonfile) {
+    $alteredexonfile = 1;
+    print STDERR "Zipping $exonfile\n" if $debug;
+    if (system("bgzip -c $exonfile > $compressedexonfile")) {
+      die "Compressing $exonfile failed: $!";
+    }
+  }
 }
 
 mkdir "svscoretmp" unless -d "svscoretmp";
@@ -134,15 +143,17 @@ unless (-s "$compressedgenefile.tbi") {
 }
 
 my $intronnumcolumn = `zcat $intronfile | head -n 1 | awk '{print NF}'`; # Figure out which column has the intron number
+$intronnumcolumn = 6 unless $intronnumcolumn;
 chomp $intronnumcolumn;
 
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
 unless (open(CONFIG, "> conf.toml")) {
+  unlink $intronfile;
   deletesvscoretmp();
   die "Could not open conf.toml: $!";
 }
-print CONFIG "[[annotation]]\nfile=\"$compressedgenefile\"\nnames=[\"Gene\"]\ncolumns=[$geneanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\",\"IntronGene\"]\ncolumns=[$intronnumcolumn,4]\nops=[\"uniq\",\"uniq\"]\n";
+print CONFIG "[[annotation]]\nfile=\"$compressedgenefile\"\nnames=[\"Gene\"]\ncolumns=[$geneanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$compressedexonfile\"\nnames=[\"ExonGene\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\",\"IntronGene\"]\ncolumns=[$intronnumcolumn,4]\nops=[\"uniq\",\"uniq\"]\n";
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
@@ -151,6 +162,7 @@ my $time = gettimeofday();
 if ($inputfile eq "stdin") { # Write standard input to temp file if input file comes from STDIN
   $tempfile = "svscoretmp/stdin$time.vcf";
   unless(open(TEMP,">$tempfile")) {
+    unlink $intronfile;
     deletesvscoretmp();
     die "Could not open $tempfile for writing; $!";
   }
@@ -168,13 +180,14 @@ if ($inputfile eq "stdin") {
 
 # Make sure header is present in input file
 unless(open(HEADERCHECK, "< $inputfile")) {
+  unlink $intronfile;
   deletesvscoretmp();
   die "Could not open $inputfile: $!";
 }
 my $firstline = <HEADERCHECK>;
 close HEADERCHECK;
 unless($firstline =~ /^#/) {
-  unlink $inputfile;
+  unlink $intronfile;
   deletesvscoretmp();
   die "***Missing header on input file";
 }
@@ -184,6 +197,7 @@ $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
 $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
 if ($compressed) {
   if (system("gunzip -c $inputfile > svscoretmp/$prefix$time.vcf")) {
+    unlink $intronfile;
     deletesvscoretmp();
     die "Could not unzip $inputfile: $!";
   } else {
@@ -194,7 +208,7 @@ my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V
 print STDERR "Preprocessing command:\n$preprocess\n" if $debug;
 if (system($preprocess) || -z $preprocessedfile) {
   unless ($debug) {
-    unlink $preprocessedfile,$sortedfile;
+    unlink $preprocessedfile,$sortedfile,$intronfile;
     deletesvscoretmp();
   }
   die "Preprocessing failed: $!"
@@ -203,16 +217,19 @@ if (system($preprocess) || -z $preprocessedfile) {
 $bedpeout = "svscoretmp/$prefix$time.out.bedpe";
 $vcfout = "svscoretmp/$prefix$time.out.vcf";
 unless(open(IN, "< $preprocessedfile")) {
+  unlink $preprocessedfile,$sortedfile,$intronfile;
   deletesvscoretmp();
   die "Could not open $preprocessedfile: $!";
 }
 unless(open(OUT, "> $bedpeout")) {
+  unlink $preprocessedfile,$sortedfile,$intronfile;
   deletesvscoretmp();
   die "Could not open output file: $!";
 }
 
 # Update header
 unless(open(HEADER, "grep \"^#\" $preprocessedfile |")) {
+  unlink $preprocessedfile,$sortedfile,$intronfile;
   deletesvscoretmp();
   die "Error grabbing header: $!";
 }
@@ -296,12 +313,14 @@ foreach (uniq(@newheader)) {
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
 unless(open(GENES, "$uncompressedgenefile")) {
+  unlink $preprocessedfile,$sortedfile,$intronfile;
   deletesvscoretmp();
   die "Could not open $genefile: $!";
 }
-foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, 5'-most start coordinate, and 3'-most stop coordinate found  (coordinates are 1-based)
+foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, and first and last possible breakpoints (in BED coordinates) which would truncate the gene
   my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = (split(/\s+/,$geneline))[0..2,$geneanncolumn-1,$genestrandcolumn-1];
-  $genestart++; ## Move interval to 1-based (VCF) coordinates (don't correct $genestop because BED intervals are non-inclusive of end position, so corrections cancel out)
+  $genestart++;
+  $genestop--;
   if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume strand stays constant
     $genes{$genesymbol}->{$genechrom}->[0] = min($genes{$genesymbol}->{$genechrom}->[0], $genestart);
     $genes{$genesymbol}->{$genechrom}->[1] = max($genes{$genesymbol}->{$genechrom}->[1], $genestop);
@@ -428,9 +447,7 @@ unlink "$vcfout.header";
 
 # Clean up
 unless ($debug) {
-  unlink $preprocessedfile;
-  unlink $vcfout;
-  unlink $bedpeout;
+  unlink $preprocessedfile,$vcfout,$bedpeout,$intronfile;
   unlink $inputfile if $compressed || $prefix eq "stdin";
   
   if ($alteredgenefile) {
