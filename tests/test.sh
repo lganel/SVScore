@@ -14,7 +14,7 @@ grep -v "^#" stresstest.svscore.vcf > stresstest.svscore.noheader.vcf
 # Perform stress test
 cd ..
 echo "********Stress Test********"
-./svscore.pl -o max,sum,top2,top2weighted,top3weighted,top4weighted,mean,meanweighted -dvc tests/dummyCADD.tsv.gz -i tests/stresstest.vcf | grep -v "^#" > tests/stresstest.svscore.test.vcf
+./svscore.pl -g tests/dummygenes.bed -e tests/dummyexons.bed -o max,sum,top2,top2weighted,top3weighted,top4weighted,mean,meanweighted -dvc tests/dummyCADD.tsv.gz -i tests/stresstest.vcf | grep -v "^#" > tests/stresstest.svscore.test.vcf
 echo -e "\n\n********NA12878********"
 ./svscore.pl -o max,sum,top5,top10,mean -dvc tests/$1 -i tests/NA12878.sv.vcf | grep -v "^#" > tests/NA12878.sv.svscore.test.vcf
 echo -e "\n\n"
@@ -53,4 +53,4 @@ else
 fi
 
 rm -rf ../svscoretmp/
-rm -f NA12878.sv.svscore.noheader.vcf NA12878.sv.svscore.test.vcf NA12878.diff stresstest.svscore.noheader.vcf stresstest.svscore.test.vcf stresstest.diff
+rm -f NA12878.sv.svscore.noheader.vcf NA12878.sv.svscore.test.vcf NA12878.diff stresstest.svscore.noheader.vcf stresstest.svscore.test.vcf stresstest.diff dummyexons.bed.gz*
