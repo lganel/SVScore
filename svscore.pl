@@ -10,6 +10,7 @@ use List::Util qw(max min sum);
 use List::MoreUtils qw(pairwise uniq);
 use Time::HiRes qw(gettimeofday);
 use Math::Round qw(nearest);
+use Data::Dumper; ## DEBUG
 
 sub main::HELP_MESSAGE(); # Declaration to make perl happy
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
@@ -17,7 +18,7 @@ $main::VERSION = '0.5';
 
 my %possibleoperations = ("MAX", 1, "SUM", 1, "TOP", 1, "MEAN", 1, "MEANWEIGHTED", 1, "TOPWEIGHTED", 1); # Hash of supported operations
 my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "CNV", "MEI", "INS"); # Hash of supported svtypes
-my %truncationtypes = ("INV","TRX","INS","DEL"); # All svtypes for which truncation scores are calculated
+my %truncationtypes = map {$_ => 1} ("INV","TRX","INS","DEL"); # All svtypes for which truncation scores are calculated
 my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
 my %options = ();
@@ -139,7 +140,7 @@ chomp $intronnumcolumn;
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
 unless (open(CONFIG, "> conf.toml")) {
-  unlink $intronfile;
+  unlink $intronfile,"$intronfile.tbi";
   deletesvscoretmp();
   die "Could not open conf.toml: $!";
 }
@@ -152,7 +153,7 @@ my $time = gettimeofday();
 if ($inputfile eq "stdin") { # Write standard input to temp file if input file comes from STDIN
   $tempfile = "svscoretmp/stdin$time.vcf";
   unless(open(TEMP,">$tempfile")) {
-    unlink $intronfile;
+    unlink $intronfile,"$intronfile.tbi";
     deletesvscoretmp();
     die "Could not open $tempfile for writing; $!";
   }
@@ -170,14 +171,14 @@ if ($inputfile eq "stdin") {
 
 # Make sure header is present in input file
 unless(open(HEADERCHECK, "< $inputfile")) {
-  unlink $intronfile;
+  unlink $intronfile,"$intronfile.tbi";
   deletesvscoretmp();
   die "Could not open $inputfile: $!";
 }
 my $firstline = <HEADERCHECK>;
 close HEADERCHECK;
 unless($firstline =~ /^#/) {
-  unlink $intronfile;
+  unlink $intronfile,"$intronfile.tbi";
   deletesvscoretmp();
   die "***Missing header on input file";
 }
@@ -187,18 +188,18 @@ $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
 $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
 if ($compressed) {
   if (system("gunzip -c $inputfile > svscoretmp/$prefix$time.vcf")) {
-    unlink $intronfile;
+    unlink $intronfile,"$intronfile.tbi";
     deletesvscoretmp();
     die "Could not unzip $inputfile: $!";
   } else {
     $inputfile = "svscoretmp/$prefix$time.vcf";
   }
 }
-my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; tabix -p vcf $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile | svtools vcftobedpe > $preprocessedfile; rm -f $sortedfile $sortedfile.tbi"; # Sort, annotate, reorder header, convert to BEDPE
+my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile | svtools vcftobedpe > $preprocessedfile; rm -f $sortedfile"; # Sort, annotate, reorder header, convert to BEDPE
 print STDERR "Preprocessing command:\n$preprocess\n" if $debug;
 if (system($preprocess) || -z $preprocessedfile) {
   unless ($debug) {
-    unlink $preprocessedfile,$sortedfile,$intronfile;
+    unlink $preprocessedfile,$sortedfile,$intronfile,"$intronfile.tbi";
     deletesvscoretmp();
   }
   die "Preprocessing failed: $!"
@@ -207,19 +208,19 @@ if (system($preprocess) || -z $preprocessedfile) {
 $bedpeout = "svscoretmp/$prefix$time.out.bedpe";
 $vcfout = "svscoretmp/$prefix$time.out.vcf";
 unless(open(IN, "< $preprocessedfile")) {
-  unlink $preprocessedfile,$sortedfile,$intronfile;
+  unlink $preprocessedfile,$sortedfile,$intronfile,"$intronfile.tbi";
   deletesvscoretmp();
   die "Could not open $preprocessedfile: $!";
 }
 unless(open(OUT, "> $bedpeout")) {
-  unlink $preprocessedfile,$sortedfile,$intronfile;
+  unlink $preprocessedfile,$sortedfile,$intronfile,"$intronfile.tbi";
   deletesvscoretmp();
   die "Could not open output file: $!";
 }
 
 # Update header
 unless(open(HEADER, "grep \"^#\" $preprocessedfile |")) {
-  unlink $preprocessedfile,$sortedfile,$intronfile;
+  unlink $preprocessedfile,$sortedfile,$intronfile,"$intronfile.tbi";
   deletesvscoretmp();
   die "Error grabbing header: $!";
 }
@@ -303,7 +304,7 @@ foreach (uniq(@newheader)) {
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
 unless(open(GENES, "$uncompressedgenefile")) {
-  unlink $preprocessedfile,$sortedfile,$intronfile;
+  unlink $preprocessedfile,$sortedfile,$intronfile,"$intronfile.tbi";
   deletesvscoretmp();
   die "Could not open $genefile: $!";
 }
@@ -386,6 +387,7 @@ while (my $inputline = <IN>) {
     foreach (split(/\|/,$rightgenenames)) {
       $rightgenenames{$_}++;
     }
+
     my @leftintrons = split(/\|/,$leftintrons);
     my @leftintrongenenames = split(/\|/,$leftintrongenenames);
     my %leftintrons = map {$leftintrons[$_] => $leftintrongenenames[$_]} (0..$#leftintrons); # @leftintrons and @leftintrongenes should have the same number of elements if vcfanno is working as it should
@@ -398,13 +400,13 @@ while (my $inputline = <IN>) {
 	my $introngene = $leftintrons{$intron};
 	$leftgenenames{$introngene}--;
 	delete $leftgenenames{$introngene} unless $leftgenenames{$introngene}; # If there are no more instances of $introngene in %leftgenenames, delete the entry
-	my $introngene = $rightintrons{$intron};
+	$introngene = $rightintrons{$intron};
 	$rightgenenames{$introngene}--;
 	delete $rightgenenames{$introngene} unless $rightgenenames{$introngene}; # If there are no more instances of $introngene in %rightgenenames, delete the entry
       }
     }
-    @leftgenenames = keys %leftgenenames;
-    @rightgenenames = keys %rightgenenames;
+    my @leftgenenames = keys %leftgenenames;
+    my @rightgenenames = keys %rightgenenames;
     if (@leftgenenames) {
       $scores{"LTRUNC"} = truncationscore($leftchrom, $leftstart, $leftstop, \@leftgenenames, \%genes, $caddfile, $ops, \%operations);
     }
@@ -451,7 +453,7 @@ unlink "$vcfout.header";
 
 # Clean up
 unless ($debug) {
-  unlink $preprocessedfile,$vcfout,$bedpeout,$intronfile;
+  unlink $preprocessedfile,$vcfout,$bedpeout,$intronfile,"$intronfile.tbi";
   unlink $inputfile if $compressed || $prefix eq "stdin";
   
   if ($alteredgenefile) {
