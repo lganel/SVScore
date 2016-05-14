@@ -33,16 +33,39 @@ my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.g
 die "Could not find $caddfile" unless -s $caddfile;
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed.gz');
 my $geneanncolumn = (defined $options{'m'} ? $options{'m'} : 4);
-$geneanncolumn = 4 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)" if $geneanncolumn <= 3;
-my $genestrandcolumn = (defined $options{'p'} ? $options{'p'} : 5);
-$genestrandcolumn = 5 && warn "Gene strand column provided without nonstandard gene annotation file - defaulting to standard gene strand column (5)" if defined $options{'m'} && !defined $options{'g'};
-$genestrandcolumn = 5 && warn "Gene annotation column must be greater than 3 - defaulting to standard gene strand column (5)" if $genestrandcolumn <= 3;
-die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==$genestrandcolumn;
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
 my $exonanncolumn = (defined $options{'n'} ? $options{'n'} : ($exonfile eq 'refGene.exons.b37.bed' ? 5 : 4));
-$exonanncolumn = 5 && warn "Exon annotation column must be greater than 3 - defaulting to standard exon annotation column (5)" if $exonanncolumn <= 3;
+my $genestrandcolumn = (defined $options{'p'} ? $options{'p'} : 5);
 $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
 my $ops = (defined $options{'o'} ? $options{'o'} : 'TOP10WEIGHTED');
+my $inputfile  = $options{'i'};
+
+if ($geneanncolumn <= 3) {
+  $geneanncolumn = 4;
+  warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)";
+}
+if ($genestrandcolumn <= 3) {
+  $genestrandcolumn = 5;
+  warn "Gene annotation column must be greater than 3 - defaulting to standard gene strand column (5)";
+}
+if ($exonanncolumn <= 3) {
+  $exonanncolumn = 5;
+  warn "Exon annotation column must be greater than 3 - defaulting to standard exon annotation column (5)";
+}
+if (defined $options{'m'} && !defined $options{'g'}) {
+  $geneanncolumn = 4;
+  warn "Custom gene annotation column provided without custom gene file - defaulting to standard gene annotation column (4)";
+}
+if (defined $options{'p'} && !defined $options{'g'}) {
+  $genestrandcolumn = 5;
+  warn "Custom gene strand column provided without custom gene annotation file - defaulting to standard gene strand column (5)";
+}
+if (defined $options{'n'} && !defined $options{'e'}) {
+  $exonanncolumn = 5;
+  warn "Custom exon annotation column provided without custom exon file - defaulting to standard exon annotation column (5)";
+}
+die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==$genestrandcolumn;
+
 my @ops = uniq(split(/,/,$ops));
 my %operations = (); # Hash of chosen operations
 foreach my $i (0..$#ops) { # Populate %operations with chosen operations given by -o
@@ -55,7 +78,6 @@ foreach my $i (0..$#ops) { # Populate %operations with chosen operations given b
   $operations{$ops[$i]} = $i;
 }
 
-my $inputfile  = $options{'i'};
 my $compressed = ($inputfile =~ /\.gz$/);
 my ($uncompressedgenefile, $uncompressedexonfile, $compressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
 
@@ -320,6 +342,28 @@ foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, st
   }
 }
 close GENES;
+
+# Perform sanity check to make sure annotation columns are specified correctly
+unless(open(EXONS, "$uncompressedexonfile")) {
+  unlink $uncompressedexonfile if $alteredexonfile && $exonfile =~ /\.gz$/;
+  unlink $compressedexonfile if $alteredexonfile && $exonfile !~ /\.gz$/;
+  unlink $uncompressedgenefile if $alteredgenefile && $genefile =~ /\.gz$/;
+  die "Could not open $exonfile: $!";
+}
+
+my $count = 1;
+my $genesfound = 0;
+while(defined(my $line = <EXONS>) && $count <= 10) {
+  $count++;
+  my $line = <EXONS>;
+  my $symbol = (split(/\s+/,$line))[$exonanncolumn-1];
+  if (exists $genes{$symbol}) {
+    $genesfound++;
+    last;
+  }
+}
+close EXONS;
+warn "************First 10 genes in exon file not found in genes file. Are your annotation columns (-m and -n) specified correctly?" unless $genesfound;
 
 print STDERR "Entering loop\n" if $debug;
 while (my $inputline = <IN>) {
