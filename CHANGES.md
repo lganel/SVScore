@@ -1,11 +1,20 @@
 ## 0.5 (Under development)
- * Handle precise breakends by examining two bases which flank the breakend (one in each direction)
+ * Calculate scores based on scores at possible breakends, not bases
+ * Revamped conditions for calculating truncation scores
+ * Rescale probability distributions based on which possible breakpoints have available scores
+ * Rescale probability distribution again for TOP[n] operations
+ * Added stress test
+ * All scores with weighted operations for variants with no PRPOS are now -1
+ * Changed usage (-i specifies input file, -o now takes comma-delimited list of operations, removed -s)
+ * Added test for PRPOS in header if a weighted operation is specified - defaults to unweighted if not found
+ * Removed -w, added TOP[n]WEIGHTED and MEANWEIGHTED as operations
+ * Default operation is now TOP10WEIGHTED
+ * INS support
  * Allow for piping VCF files through standard input
  * Use exact breakpoint representation of SVs in BEDPE (in conjunction with new version of svtools)
  * Calculate span scores between most likely bases
  * Calculate truncation scores for DELs
  * Treat MEIs like BNDs
- * Only calculate truncation scores for truncated genes, not all genes hit by variants which truncate a gene
  * Bug fixes/code improvements
  * Error handling
  * Modified temp file naming conventions

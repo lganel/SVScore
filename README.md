@@ -63,7 +63,7 @@ For weighted operations, if PRPOS is not found in the header, SVScore will calcu
 * Perl v5.10.1 or later
 * [vcfanno](https://www.github.com/brentp/vcfanno) v0.0.10
 * [bedtools](https://www.github.com/arq5x/bedtools2)
-* [svtools](https://github.com/hall-lab/svtools)
+* [svtools v0.2.0](https://github.com/hall-lab/svtools/releases/tag/v0.2.0)
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from v1.3 of [CADD](http://cadd.gs.washington.edu/download) 
 * [tabix/bgzip](https://github.com/samtools/htslib)
 * Your favorite hg19/GRCh37-based, tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download RefSeq annotations (functionality courtesy of Colby Chiang).
