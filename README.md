@@ -33,14 +33,23 @@ Truncation intervals are defined for each gene which seems to be truncated by a 
 
 ## Supported SV types and intervals
 |     | LEFT | RIGHT | SPAN | LTRUNC | RTRUNC | Notes
+
 |=====|======|=======|======|========|========|=======
+
 | DEL |  X   |   X   |  X   |   X    |   X    |
+
 | DUP |  X   |   X   |  X   |        |        |
+
 | INV |  X   |   X   |      |   X    |   X    |
+
 | BND |  X   |   X   |      |        |        |
+
 | TRX |  X   |   X   |      |   X    |   X    | Translocation
+
 | INS |  X   |   X   |      |   X    |   X    | Note: to function correctly, SVScore requires that POS=END and CIPOS=CIEND for INS variants) - LEFT, RIGHT, (LTRUNC, RTRUNC if necessary)
+
 | CNV |  X   |   X   |  X   |        |        |
+
 | MEI |  X   |   X   |      |        |        |
 
 ## Operations
