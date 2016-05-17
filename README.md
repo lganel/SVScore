@@ -32,25 +32,17 @@ For each variant, between scores are calculated over a number of intervals which
 Truncation intervals are defined for each gene which seems to be truncated by a variant. The interval extends from the furthest upstream base of the furthest upstream breakend (LEFT for genes on the + strand, RIGHT for those on the - strand) to the end of the gene. Each truncation score is the maximum over all genes truncated by a variant.
 
 ## Supported SV types and intervals
-|     | LEFT | RIGHT | SPAN | LTRUNC | RTRUNC | Notes
-
-|=====|======|=======|======|========|========|=======
-
-| DEL |  X   |   X   |  X   |   X    |   X    |
-
-| DUP |  X   |   X   |  X   |        |        |
-
-| INV |  X   |   X   |      |   X    |   X    |
-
-| BND |  X   |   X   |      |        |        |
-
-| TRX |  X   |   X   |      |   X    |   X    | Translocation
-
-| INS |  X   |   X   |      |   X    |   X    | Note: to function correctly, SVScore requires that POS=END and CIPOS=CIEND for INS variants) - LEFT, RIGHT, (LTRUNC, RTRUNC if necessary)
-
-| CNV |  X   |   X   |  X   |        |        |
-
-| MEI |  X   |   X   |      |        |        |
+|      | LEFT | RIGHT | SPAN | LTRUNC | RTRUNC | Notes
+|:---:|:---:|:---:|:---:|:---:|:---:|:---
+|DEL|X|X|X|X|X|
+|DUP|X|X|X|||
+|INV|X|X||X|X|
+|BND|X|X||||
+|TRX|X|X||X|X|Translocation
+|INS|X|X||X|X|
+|CNV|X|X|X|||
+|MEI|X|X||||
+Note: to function correctly, SVScore requires that POS=END and CIPOS=CIEND for INS variants
 
 ## Operations
 -o specifies the operation(s) used to calculate SVScores. These operations are applied to each interval of the SV (see above). This option takes an arbitrary-length, case insensitive, comma-separated list of operations from the following list:
