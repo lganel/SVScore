@@ -20,7 +20,7 @@ usage: ./svscore.pl [-dv] [-o op] [-t topnumber] [-g genefile] [-m geneannotatio
 ```
 
 ## Output
-SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE\[op\](_[interval]), where [op] represents the operation used to calculate that score (see Operations) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/TRX variants which seem to truncate a gene on the left side, the interval is from the left breakend to the end of the gene), and right truncation score. Scores with no interval listed are the maximum over all intervals for that operation.
+SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE\[op\](_[interval]), where [op] represents the operation used to calculate that score (see [Operations](#operations)) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/TRX variants which seem to truncate a gene on the left side, the interval is from the left breakend to the end of the gene), and right truncation score. Scores with no interval listed (such as SVSCOREMAX=) are the maximum over all intervals for that operation.
 
 ## Intervals
 For each variant, between scores are calculated over a number of intervals which varies by SV type. For intervals chosen for each SV type, see [Supported SV types and intervals](#supported-sv-types-and-intervals)
@@ -42,10 +42,11 @@ Truncation intervals are defined for each gene which seems to be truncated by a 
 |INS|X|X||X|X|
 |CNV|X|X|X|||
 |MEI|X|X||||
-Note: to function correctly, SVScore requires that POS=END and CIPOS=CIEND for INS variants
+To function correctly, SVScore requires that POS=END and CIPOS=CIEND for INS variants
+LTRUNC and RTRUNC scores are only calculated when a breakend overlaps an exon or a breakend overlaps an intron which is not also touched by the opposite breakend.
 
 ## Operations
--o specifies the operation(s) used to calculate SVScores. These operations are applied to each interval of the SV (see above). This option takes an arbitrary-length, case insensitive, comma-separated list of operations from the following list:
+-o specifies the operation(s) used to calculate SVScores. These operations are applied to each interval of the SV (see [Supported SV types and intervals](#supported-sv-types-and-intervals)). This option takes an arbitrary-length, case insensitive, comma-separated list of operations from the following list:
 * sum - reports the sum of each interval
 * max - reports the maximum of each interval
 * mean - reports the arithmetic mean of each interval
@@ -73,8 +74,8 @@ If an input VCF file already has SVSCORE annotations in the INFO column, new ann
 
 Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompressed input files should not end with this suffix. Annotation files may be gzipped or unzipped. SVScore will zip/unzip files as necessary using bgzip and zcat.
 
-For BND variants, primary mate is considered the left breakend and the secondary mate is considered the right breakend.
+For multiline variants, primary mate is considered the left breakend and the secondary mate is considered the right breakend.
 
-If only one mate line of a BND variant is present in the VCF file, left and right breakend scores are still calculated, as well as one truncation score if applicable (whether it is the left or right truncation score depends on whether the line describes a primary or secondary mate). There must be a CIEND interval in the INFO field for this to happen.
+If only one mate line of a multiline variant is present in the VCF file, left and right breakend scores are still calculated, as well as one truncation score if applicable (whether it is the left or right truncation score depends on whether the line describes a primary or secondary mate). There must be a CIEND interval in the INFO field for this to happen.
 
 Variants with type DEL, DUP, or CNV which are over 1 Mb in length are automatically given a score of 100
