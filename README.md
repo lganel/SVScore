@@ -1,5 +1,5 @@
 # SVScore
-SVScore is a VCF annotation tool which scores structural variants by predicted pathogenicity based on SNP-based CADD scores. For each variant, SVScore first defines important genomic intervals based on the variant type, breakend confidence intervals, and nearby gene/exon annotations. It then applies an operation to each interval to aggregate the CADD scores in that interval into an interval score. A variant\'s score for a given operation defined as the maximum of all interval scores calculated using that operation.
+SVScore is a VCF annotation tool which scores structural variants by predicted pathogenicity based on SNP-based CADD scores. For each variant, SVScore first defines important genomic intervals based on the variant type, breakend confidence intervals, and nearby gene/exon annotations. It then applies an operation to each interval to aggregate the CADD scores in that interval into an interval score. A score for a given operation defined as the maximum of all interval scores calculated using that operation.
 
 ## Usage
 ```
@@ -23,7 +23,7 @@ usage: ./svscore.pl [-dv] [-o op] [-t topnumber] [-g genefile] [-m geneannotatio
 SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE[op](_[interval]), where [op] represents the operation used to calculate that score (see Operations) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/TRX variants which seem to truncate a gene on the left side, the interval is from the left breakend to the end of the gene), and right truncation score. Scores with no interval listed are the maximum over all intervals for that operation.
 
 ## Intervals
-For each variant, between scores are calculated over a number of intervals which varies by SV type. For intervals chosen for each SV type, see [Supported SV types and intervals](supported-sv-types-and-intervals)
+For each variant, between scores are calculated over a number of intervals which varies by SV type. For intervals chosen for each SV type, see [Supported SV types and intervals](#supported-sv-types-and-intervals)
 * LEFT - confidence interval around the left breakpoint
 * RIGHT - confidence interval around the right breakpoint
 * SPAN - from the most likely base in the left breakpoint confidence interval to the most likely base in the right breakpoint confidence interval
@@ -42,7 +42,6 @@ Truncation intervals are defined for each gene which seems to be truncated by a 
 | INS |  X   |   X   |      |   X    |   X    | Note: to function correctly, SVScore requires that POS=END and CIPOS=CIEND for INS variants) - LEFT, RIGHT, (LTRUNC, RTRUNC if necessary)
 | CNV |  X   |   X   |  X   |        |        |
 | MEI |  X   |   X   |      |        |        |
-* CNV - LEFT, RIGHT, SPAN, (LTRUNC, RTRUNC if necessary)
 
 ## Operations
 -o specifies the operation(s) used to calculate SVScores. These operations are applied to each interval of the SV (see above). This option takes an arbitrary-length, case insensitive, comma-separated list of operations from the following list:
