@@ -20,7 +20,7 @@ usage: ./svscore.pl [-dv] [-o op] [-t topnumber] [-g genefile] [-m geneannotatio
 ```
 
 ## Output
-SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE[op](_[interval]), where [op] represents the operation used to calculate that score (see Operations) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/TRX variants which seem to truncate a gene on the left side, the interval is from the left breakend to the end of the gene), and right truncation score. Scores with no interval listed are the maximum over all intervals for that operation.
+SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE\[op\](_[interval]), where [op] represents the operation used to calculate that score (see Operations) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/TRX variants which seem to truncate a gene on the left side, the interval is from the left breakend to the end of the gene), and right truncation score. Scores with no interval listed are the maximum over all intervals for that operation.
 
 ## Intervals
 For each variant, between scores are calculated over a number of intervals which varies by SV type. For intervals chosen for each SV type, see [Supported SV types and intervals](#supported-sv-types-and-intervals)
