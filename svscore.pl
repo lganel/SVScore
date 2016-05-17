@@ -16,8 +16,8 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt 
 $main::VERSION = '0.5';
 
 my %possibleoperations = ("MAX", 1, "SUM", 1, "TOP", 1, "MEAN", 1, "MEANWEIGHTED", 1, "TOPWEIGHTED", 1); # Hash of supported operations
-my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "TRX", "CNV", "MEI", "INS"); # Hash of supported svtypes
-my %truncationtypes = map {$_ => 1} ("INV","TRX","INS","DEL"); # All svtypes for which truncation scores are calculated
+my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "CNV", "MEI", "INS"); # Hash of supported svtypes
+my %truncationtypes = map {$_ => 1} ("INV","INS","DEL"); # All svtypes for which truncation scores are calculated
 my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
 my %options = ();

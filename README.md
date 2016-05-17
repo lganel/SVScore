@@ -20,7 +20,7 @@ usage: ./svscore.pl [-dv] [-o op] [-t topnumber] [-g genefile] [-m geneannotatio
 ```
 
 ## Output
-SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE\[op\](_[interval]), where [op] represents the operation used to calculate that score (see [Operations](#operations)) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/TRX variants which seem to truncate a gene on the left side, the interval is from the left breakend to the end of the gene), and right truncation score. Scores with no interval listed (such as SVSCOREMAX=) are the maximum over all intervals for that operation.
+SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE\[op\](_[interval]), where [op] represents the operation used to calculate that score (see [Operations](#operations)) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/DEL/INS variants which seem to truncate a gene on the left side, the interval is from the most likely base of the left breakend to the end of the gene), and right truncation score. Scores with no interval listed (such as SVSCOREMAX=) are the maximum over all intervals for that operation.
 
 ## Intervals
 For each variant, scores are calculated over a number of intervals which varies by SV type. The intervals chosen for each SV type, are described in [Supported SV types and intervals](#supported-sv-types-and-intervals)
@@ -39,7 +39,6 @@ Truncation intervals are defined for each gene which seems to be truncated by a 
 |DUP|X|X|X|||
 |INV|X|X||X|X|
 |BND|X|X||||
-|TRX|X|X||X|X|Translocation
 |INS|X|X||X|X|
 |CNV|X|X|X|||
 |MEI|X|X||||

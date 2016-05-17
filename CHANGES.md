@@ -9,15 +9,15 @@
  * Added test for PRPOS in header if a weighted operation is specified - defaults to unweighted if not found
  * Removed -w, added TOP[n]WEIGHTED and MEANWEIGHTED as operations
  * Default operation is now TOP10WEIGHTED
- * INS support
+ * Added INS support, removed TRX support
  * Allow for piping VCF files through standard input
  * Use exact breakpoint representation of SVs in BEDPE (in conjunction with new version of svtools)
  * Calculate span scores between most likely bases
  * Calculate truncation scores for DELs
  * Treat MEIs like BNDs
+ * Calculate truncation scores from most likely bases
  * Bug fixes/code improvements
  * Error handling
- * Modified temp file naming conventions
 
 ## 0.4 (11/12/15)
  * Account for regions of the genome which do not have CADD scores
