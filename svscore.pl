@@ -373,6 +373,7 @@ while (my $inputline = <IN>) {
   # Parse line
   my @splitline = split(/\s+/,$inputline);
   my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $svtype, $info_a, $info_b) = @splitline[0..6, 10, 12, 13];
+  my ($pos,$end) = getfields($info_a,"POS","END");
 
   $svtype = substr($svtype, 0, 3);
   unless (exists $types{$svtype}) {
@@ -397,7 +398,6 @@ while (my $inputline = <IN>) {
 #  }
 
   if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
-    my ($pos,$end) = getfields($info_a,"POS","END");
     if ($rightstop - $leftstart > 1000000) {
       $scores{"SPAN"} = (100) x @ops;
     } else {
@@ -465,8 +465,8 @@ while (my $inputline = <IN>) {
 
     my @lefttruncatedgenes = keys %lefttruncatedgenes;
     my @righttruncatedgenes = keys %righttruncatedgenes;
-    $scores{"LTRUNC"} = truncationscore($leftchrom, $leftstart, $leftstop, \@lefttruncatedgenes, \%genes, $caddfile, $ops, \%operations) if @lefttruncatedgenes;
-    $scores{"RTRUNC"} = truncationscore($rightchrom, $rightstart, $rightstop, \@righttruncatedgenes, \%genes, $caddfile, $ops, \%operations) if @righttruncatedgenes;
+    $scores{"LTRUNC"} = truncationscore($leftchrom, $pos, \@lefttruncatedgenes, \%genes, $caddfile, $ops, \%operations) if @lefttruncatedgenes;
+    $scores{"RTRUNC"} = truncationscore($rightchrom, $end, \@righttruncatedgenes, \%genes, $caddfile, $ops, \%operations) if @righttruncatedgenes;
   }
 
   # This is an ugly loop which transposes %scores so that the keys are operations, not intervals
@@ -641,7 +641,7 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
 }
 
 sub truncationscore { # Calculate truncation score based on the coordinates of a given breakend and the names of the genes it hits
-  my ($chrom, $start, $stop, $introngenesref, $genesref, $caddfile, $ops, $operationsref) = @_;
+  my ($chrom, $pos, $introngenesref, $genesref, $caddfile, $ops, $operationsref) = @_;
   my @ops = split (/,/,$ops);
   my @introngenes = @{$introngenesref};
   return "" unless @introngenes;
@@ -652,9 +652,9 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
     my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$chrom}}[0..2];	
     my $cscoreopres;
     if ($genestrand eq '+') {
-      $cscoreopres = cscoreop($caddfile, $ops, $chrom, max($genestart,$start),$genestop, -1); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+      $cscoreopres = cscoreop($caddfile, $ops, $chrom, max($genestart,$pos),$genestop, -1); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
     } else {
-      $cscoreopres = cscoreop($caddfile, $ops, $chrom, $genestart,min($genestop,$stop), -1); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
+      $cscoreopres = cscoreop($caddfile, $ops, $chrom, $genestart,min($genestop,$pos), -1); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
     }
     foreach my $op (keys %operations) {
       push @{$truncationscores{$op}}, $cscoreopres->[$operations{$op}];
