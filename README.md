@@ -7,7 +7,7 @@ usage: ./svscore.pl [-dv] [-o op] [-t topnumber] [-g genefile] [-m geneannotatio
     -i        Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use "-i stdin" if using standard input
     -d        Debug mode, keeps intermediate and supporting files, displays progress
     -v        Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
-    -o        Comma-separated list of operations to perform on CADD score intervals (must be some combination of sum, max, mean, meanweighted, top\\d, or top\\dweighted - defaults to top10weighted)
+    -o        Comma-separated list of operations to perform on CADD score intervals (must be some combination of sum, max, mean, meanweighted, top\\d, and top\\dweighted - defaults to top10weighted)
     -g        Points to gene BED file (refGene.genes.b37.bed)
     -e        Points to exon BED file (refGene.exons.b37.bed)
     -m        Column number for gene name in gene BED file (4)
@@ -23,12 +23,13 @@ usage: ./svscore.pl [-dv] [-o op] [-t topnumber] [-g genefile] [-m geneannotatio
 SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE\[op\](_[interval]), where [op] represents the operation used to calculate that score (see [Operations](#operations)) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/TRX variants which seem to truncate a gene on the left side, the interval is from the left breakend to the end of the gene), and right truncation score. Scores with no interval listed (such as SVSCOREMAX=) are the maximum over all intervals for that operation.
 
 ## Intervals
-For each variant, between scores are calculated over a number of intervals which varies by SV type. For intervals chosen for each SV type, see [Supported SV types and intervals](#supported-sv-types-and-intervals)
+For each variant, scores are calculated over a number of intervals which varies by SV type. The intervals chosen for each SV type, are described in [Supported SV types and intervals](#supported-sv-types-and-intervals)
 * LEFT - confidence interval around the left breakpoint
 * RIGHT - confidence interval around the right breakpoint
 * SPAN - from the most likely base in the left breakpoint confidence interval to the most likely base in the right breakpoint confidence interval
 * LTRUNC - left truncation
 * RTRUNC - right truncation
+
 Truncation intervals are defined for each gene which seems to be truncated by a variant. The interval extends from the furthest upstream base of the furthest upstream breakend (LEFT for genes on the + strand, RIGHT for those on the - strand) to the end of the gene. Each truncation score is the maximum over all genes truncated by a variant.
 
 ## Supported SV types and intervals
@@ -43,6 +44,7 @@ Truncation intervals are defined for each gene which seems to be truncated by a 
 |CNV|X|X|X|||
 |MEI|X|X||||
 To function correctly, SVScore requires that POS=END and CIPOS=CIEND for INS variants
+
 LTRUNC and RTRUNC scores are only calculated when a breakend overlaps an exon or a breakend overlaps an intron which is not also touched by the opposite breakend.
 
 ## Operations

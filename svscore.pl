@@ -702,7 +702,7 @@ sub main::HELP_MESSAGE() {
     -i	      Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use \"-i stdin\" if using standard input
     -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
-    -o	      Comma-separated list of operations to perform on CADD score intervals (must be some combination of sum, max, mean, meanweighted, top\\d, or top\\dweighted - defaults to top10weighted)
+    -o	      Comma-separated list of operations to perform on CADD score intervals (must be some combination of sum, max, mean, meanweighted, top\\d, and top\\dweighted - defaults to top10weighted)
     -g	      Points to gene BED file (refGene.genes.b37.bed)
     -e	      Points to exon BED file (refGene.exons.b37.bed)
     -m	      Column number for gene name in gene BED file (4)
