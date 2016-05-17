@@ -707,7 +707,7 @@ sub main::HELP_MESSAGE() {
     -e	      Points to exon BED file (refGene.exons.b37.bed)
     -m	      Column number for gene name in gene BED file (4)
     -p	      Column number for strand in gene BED file (5)
-    -n	      Column number for gene name in exon BED file (5)
+    -n	      Column number for gene name in exon BED file (5 for refGene.exons.b37.bed, 4 otherwise)
     -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
 
     --help    Display this message
