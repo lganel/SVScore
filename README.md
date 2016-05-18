@@ -30,7 +30,7 @@ For each variant, scores are calculated over a number of intervals which varies 
 * LTRUNC - left truncation
 * RTRUNC - right truncation
 
-Truncation intervals are defined for each gene which seems to be truncated by a variant. The interval extends from the furthest upstream base of the furthest upstream breakend (LEFT for genes on the + strand, RIGHT for those on the - strand) to the end of the gene. Each truncation score is the maximum over all genes truncated by a variant.
+Truncation intervals are defined for each gene which seems to be truncated by a variant. The interval extends from the most likely base of the furthest upstream breakend (LEFT for genes on the + strand, RIGHT for those on the - strand) to the end of the gene. Each truncation score is the maximum over all genes truncated by a variant.
 
 ## Supported SV types and intervals
 |      | LEFT | RIGHT | SPAN | LTRUNC | RTRUNC | Notes
@@ -56,6 +56,8 @@ LTRUNC and RTRUNC scores are only calculated when a breakend overlaps an exon or
 * top[n]weighted - reports the mean of the [n] largest scores in each interval with the left and right breakends weighted by the probability distribution in the PRPOS and PREND fields of the VCF INFO column
 
 For weighted operations, if PRPOS is not found in the header, SVScore will calculate unweighted means with a warning. If PRPOS or PREND is missing from a variant but is present in the header, that variant will receive a score of -1 for all weighted operations
+
+For SPAN/LTRUNC/RTRUNC, these operations are applied to the scores of the bases in the interval. For LEFT/RIGHT intervals, the operations are applied to scores assigned to each possible breakpoint, which is calculated by taking the average of the 2 flanking bases (one on either side of the possible breakpoint)
 
 ## Dependencies
 * A Linux-like system with a Bash-like shell

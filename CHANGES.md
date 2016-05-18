@@ -1,5 +1,5 @@
 ## 0.5 (Under development)
- * Calculate scores based on scores at possible breakends, not bases
+ * Calculate breakend scores based on scores at possible breakends, not bases
  * Revamped conditions for calculating truncation scores
  * Rescale probability distributions based on which possible breakpoints have available scores
  * Rescale probability distribution again for TOP[n] operations
