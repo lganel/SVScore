@@ -166,7 +166,7 @@ unless (open(CONFIG, "> conf.toml")) {
   deletesvscoretmp();
   die "Could not open conf.toml: $!";
 }
-print CONFIG "[[annotation]]\nfile=\"$compressedexonfile\"\nnames=[\"ExonGene\"]\ncolumns=[$exonanncolumn]\nops=[\"concat\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\",\"IntronGene\"]\ncolumns=[$intronnumcolumn,4]\nops=[\"concat\",\"concat\"]\n";
+print CONFIG "[[annotation]]\nfile=\"$compressedexonfile\"\nnames=[\"ExonGene\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\",\"IntronGene\"]\ncolumns=[$intronnumcolumn,4]\nops=[\"concat\",\"concat\"]\n";
 close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
@@ -330,10 +330,9 @@ unless(open(GENES, "$uncompressedgenefile")) {
   deletesvscoretmp();
   die "Could not open $genefile: $!";
 }
-foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, and first and last possible breakpoints (in BED coordinates) which would truncate the gene
+foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, and first and last bases (in VCF coordinates) of each gene
   my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = (split(/\s+/,$geneline))[0..2,$geneanncolumn-1,$genestrandcolumn-1];
   $genestart++;
-  $genestop--;
   if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume strand stays constant
     $genes{$genesymbol}->{$genechrom}->[0] = min($genes{$genesymbol}->{$genechrom}->[0], $genestart);
     $genes{$genesymbol}->{$genechrom}->[1] = max($genes{$genesymbol}->{$genechrom}->[1], $genestop);
@@ -372,7 +371,7 @@ while (my $inputline = <IN>) {
   }
   # Parse line
   my @splitline = split(/\s+/,$inputline);
-  my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $svtype, $info_a, $info_b) = @splitline[0..6, 10, 12, 13];
+  my ($leftchrom, $leftstart, $leftstop, $rightchrom, $rightstart, $rightstop, $id, $svtype, $info_a, $info_b) = @splitline[0..6, 10, 18, 19];
   my ($pos,$end) = getfields($info_a,"POS","END");
 
   $svtype = substr($svtype, 0, 3);
@@ -381,10 +380,11 @@ while (my $inputline = <IN>) {
     print OUT $inputline;
     next;
   }
-  my ($probleft,$probright) = getfields($info_a,"PRPOS","PREND") if $ops =~ /WEIGHTED/;
+  my ($probleft,$probright);
+  ($probleft,$probright) = getfields($info_a,"PRPOS","PREND") if $ops =~ /WEIGHTED/;
+  $probleft = "" unless defined $probleft;
+  $probright = "" unless defined $probright;
 
-  
-  
   my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
   $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
@@ -396,7 +396,6 @@ while (my $inputline = <IN>) {
 #    $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
 #    $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
 #  }
-
   if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
     if ($rightstop - $leftstart > 1000000) {
       $scores{"SPAN"} = (100) x @ops;
@@ -489,8 +488,8 @@ while (my $inputline = <IN>) {
     }
   }
 
-  $splitline[12] = $info_a;
-  $splitline[13] = $info_b;
+  $splitline[18] = $info_a;
+  $splitline[19] = $info_b;
   print OUT join("\t",@splitline) . "\n";
 
   print STDERR $.,", " if $debug;
@@ -528,11 +527,12 @@ unless ($debug) {
   closedir(DIR);
 }
 
-sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. In VCF coordinates, $start is the base preceding the first possible breakpoint, and $stop is the base preceding the last possible breakpoint. In BED, $start is the first possible breakpoint, and $stop is the final possible breakpoint. cscoreop will return -1 for any weighted operation on a variant without a PRPOS field. Giving -1 as $prpos signifies that scores should not be weighted (i.e. the score is a span/truncation score), while giving "" as $prpos signifies that the variant has no PRPOS field
+sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. For left/right breakends, $start is the first possible breakpoint, and $stop is the final possible breakpoint (in BED coordinates). For span/truncation scores, [$start,$stop] is an inclusive interval of all the affected bases (in VCF coordinates). cscoreop will return -1 for any weighted operation on a variant without a PRPOS field. Giving -1 as $prpos signifies that scores should not be weighted (i.e. the score is a span/truncation score), while giving "" as $prpos signifies that the variant has no PRPOS field
   my ($filename, $ops, $chrom, $start, $stop, $prpos) = @_;
   my @ops = uniq(split(/,/,$ops));
   my (@prpos,%probdist);
-  my $weight = ($ops =~ /WEIGHTED/ && $prpos && $prpos ne -1);
+  my $spanortrunc = ($prpos eq -1);
+  my $weight = ($ops =~ /WEIGHTED/ && $prpos && !$spanortrunc);
   if ($weight) {
     @prpos = split(/,/,$prpos);
     foreach my $i ($start..$stop) { # Populate %probdist
@@ -541,8 +541,8 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   }
   
   my (%bptscores,$res) = (); # %bptscores = {BEDcoordinate => Possiblebreakpointscore}
-  my $stopinc = $stop+1; ## Increment end coordinate for tabix so that we capture the CADD score for the base following the interval to allow for calculation of a score for the final possible breakpoint
-  my $tabixoutput = `tabix $filename $chrom:$start-$stopinc`;
+  $stop++ unless $spanortrunc; ## Increment end coordinate for tabix so that we capture the CADD score for the base following the interval to allow for calculation of a score for the final possible breakpoint
+  my $tabixoutput = `tabix $filename $chrom:$start-$stop`;
   my @tabixoutputlines = split(/\n/,$tabixoutput);
   
   my %basescores = (); # Hash from VCF position to list of scores for each position
@@ -552,61 +552,66 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   }
   foreach my $pos (sort {$a <=> $b} keys %basescores) { # Replace values in %basescores with max score at each VCF position
     $basescores{$pos} = max(@{$basescores{$pos}});
-    if (exists $basescores{$pos-1}) { # Calculate all scores for possible breakpoints by averaging the base scores of the two flanking bases of the possible breakpoint. Place scores in %bptscores
+    if (!$spanortrunc && exists $basescores{$pos-1}) { # Calculate all scores for possible breakpoints by averaging the base scores of the two flanking bases of the possible breakpoint. Place scores in %bptscores
       $bptscores{$pos-1} = ($basescores{$pos-1} + $basescores{$pos}) / 2;
       delete $basescores{$pos-1}; # Save some memory - the basescores for all bases before $pos are now useless
     }
   }
 
-  unless (@tabixoutputlines && %bptscores) { # Short circuit if interval does not have enough base scores to calculate breakpoint scores (i.e. there are no 2 consecutive bases with scores in the interval)
+  my $scorehashref = ($spanortrunc ? \%basescores : \%bptscores); # Choose which scores hash to collapse based on whether the interval is a span/trunc or a left/right breakend
+  my %scores = %{$scorehashref}; # Use reference to avoid copying hash directly. %scores is %basescores if the interval is span/trunc, or %bptscores if the interval is left/right
+
+  unless (@tabixoutputlines && %scores) { # Short circuit if interval is a left/right breakend and there are not enough base scores to calculate breakpoint scores (i.e. there are no 2 consecutive bases with scores in the interval), or if the interval is a span or truncation and there are no base scores
     my @res = (-1) x @ops;
     return \@res; 
   }
 
-  my (@bptscores,@probdist,@weightedbptscores) = ();
-  foreach my $pos (sort {$a <=> $b} keys %bptscores) { # Collapse %bptscores and %probdist into arrays, getting rid of positions in %probdist with no corresponding possible breakpoint scores
-    push @bptscores, $bptscores{$pos};
+  # @scores is keys %basescores (if the interval is span/trunc) or keys %bptscores (if the interval is left/right). Either way, @scores is ordered by position
+  my (@scores,@probdist,@weightedbptscores) = ();
+  foreach my $pos (sort {$a <=> $b} keys %scores) { # Collapse %bptscores and %probdist into arrays, getting rid of positions in %probdist with no corresponding possible breakpoint scores
+    push @scores, $scores{$pos};
     push @probdist, $probdist{$pos} if $weight;
   }
 
-  if ($weight) { # Rescale probability distribution to add up to 1 (to account for excluded bases with no C scores or faulty PRPOS annotation) and weight @bptscores
+  if ($weight) { # Rescale probability distribution to add up to 1 (to account for excluded bases with no C scores or faulty PRPOS annotation) and weight @scores
     my $normref = normalize(\@probdist);
     @probdist = @{$normref};
-    @weightedbptscores = pairwise {$a * $b} @bptscores, @probdist;
+    @weightedbptscores = pairwise {$a * $b} @scores, @probdist;
   }
 
   foreach my $op (@ops) { ## Loop through all operations in @ops, appending the resulting score to @res
-    my $weightedop = ($op =~ /WEIGHTED/ && $prpos ne -1);
+    my $weightedop = ($op =~ /WEIGHTED/ && !$spanortrunc);
     if ($weightedop && !$prpos) { ## Don't calculate scores for weighted ops if PRPOS is absent
       push @{$res}, -1;
       next;
     }
 
-    my $scoresref = ($weightedop ? \@weightedbptscores : \@bptscores); # Use a reference to avoid copying arrays.
+    my $opscorelistref = ($weightedop ? \@weightedbptscores : \@scores); # Use a reference to avoid copying arrays.
+
     if ($op =~ /^TOP(\d+)/) {
-      my @scores = @{$scoresref};
-      my $topn = min($1, scalar @scores);
-      my @topnindices = (sort {$scores[$b] <=> $scores[$a]} (0..$#scores))[0..$topn-1]; # Get indices of the greatest $topn positions in @scores. These represent the positions with the highest (product of probability and) breakpoint scores
-      my @topnscores = @bptscores[@topnindices]; # Capture unweighted scores of $topn possible breakpoints in interval
+      my @optopscores = @{$opscorelistref}; # @optopscores is @weightedbptscores if $op is weighted and the interval is left/right, keys %bptscores if $op is not weighted and the interval is left/right, or keys %basescores if the interval is span/trunc
+      my $topn = min($1, scalar @optopscores);
+      my @topnindices = (sort {$optopscores[$b] <=> $optopscores[$a]} (0..$#optopscores))[0..$topn-1]; # Get indices of the greatest $topn positions in @optopscores. These represent the positions with the highest (product of probability and) breakpoint scores
+      my @topnscores = @scores[@topnindices]; # Capture unweighted scores of $topn possible breakpoints in interval
 
       if ($weightedop) {
 	my @topnprobdist = @probdist[@topnindices];
-	# Rescale probability distribution to add up to 1 and weight @bptscores
+	# Rescale probability distribution to add up to 1 and weight @topnscores
 	my $topnnormref = normalize(\@topnprobdist);
 	@topnprobdist = @{$topnnormref};
 	@topnscores = pairwise {$a * $b} @topnscores, @topnprobdist;
       }
-      $scoresref = \@topnscores;
+      $opscorelistref = \@topnscores;
     }
 
     my $newscore;
-    my @scores = @{$scoresref};
+    my @opscores = @{$opscorelistref}; # If $op is TOP, @opscores is @topnscores (which is weighted if $op is weighted). Otherwise, @opscores is @weightedbptscores if $op is weighted and the interval is left/right, keys %bptscores if $op is not weighted and the interval is left/right, or keys %basescores if the interval is span/trunc
     if ($op eq "MAX") {
-      $newscore = nearest(0.001,max(@scores));
-    } elsif ($op eq "SUM" || $weightedop) { # Compute sum of @scores if $op is SUM, or if the op is weighted and we're on a breakend, in which case, @scores is @weightedbptscores (or a subset of it in the TOP case), so the sum of @scores is the weighted mean of @bptscores (or of the subset, if $op begins with TOP)
-      $newscore = nearest(0.001,sum(@scores));
-    } elsif ($op eq "MEAN" || $op =~ /^TOP\d+$/ || ($op =~ /WEIGHTED/ && $prpos eq -1)) { # Compute mean of @scores if $op is MEAN or TOP, or if $op is MEANWEIGHTED or TOP\d+WEIGHTED and we're on the span/truncation score
-      $newscore = nearest(0.001,sum(@scores)/scalar(@scores));
+      $newscore = nearest(0.001,max(@opscores));
+    } elsif ($op eq "SUM" || $weightedop) { # Compute sum of @opscores if $op is SUM, or if the op is weighted and we're on a breakend, in which case, @opscores is @weightedbptscores (or a subset of it in the TOP case), so the sum of @opscores is the weighted mean of @scores (or of the subset, if $op begins with TOP)
+      $newscore = nearest(0.001,sum(@opscores));
+    } elsif ($op eq "MEAN" || $op =~ /^TOP\d+$/ || ($op =~ /WEIGHTED/ && $prpos eq -1)) { # Compute mean of @opscores if $op is MEAN or TOP, or if $op is MEANWEIGHTED or TOP\d+WEIGHTED and we're on the span/truncation score
+      $newscore = nearest(0.001,sum(@opscores)/scalar(@opscores));
     } else {
       die "Error: Unrecognized operation: $op"
     }
