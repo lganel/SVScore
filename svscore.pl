@@ -15,6 +15,7 @@ sub main::HELP_MESSAGE(); # Declaration to make perl happy
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
 $main::VERSION = '0.5';
 
+eval {
 my %possibleoperations = ("MAX", 1, "SUM", 1, "TOP", 1, "MEAN", 1, "MEANWEIGHTED", 1, "TOPWEIGHTED", 1); # Hash of supported operations
 my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "CNV", "MEI", "INS"); # Hash of supported svtypes
 my %truncationtypes = map {$_ => 1} ("INV","INS","DEL"); # All svtypes for which truncation scores are calculated
@@ -27,10 +28,11 @@ getopts('dvc:g:e:m:o:p:i:n:',\%options);
 my $debug = defined $options{'d'};
 my $verbose = defined $options{'v'};
 
-&main::HELP_MESSAGE() && die unless defined $options{'i'};
-
+my $inputfile  = $options{'i'};
+&main::HELP_MESSAGE() && die unless defined $inputfile;
+die "Could not find input file $inputfile" unless (-s $inputfile || $inputfile eq "stdin");
 my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
-die "Could not find $caddfile" unless -s $caddfile;
+die "Could not find CADD file $caddfile" unless -s $caddfile;
 my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed.gz');
 my $geneanncolumn = (defined $options{'m'} ? $options{'m'} : 4);
 my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
@@ -38,8 +40,8 @@ my $exonanncolumn = (defined $options{'n'} ? $options{'n'} : ($exonfile eq 'refG
 my $genestrandcolumn = (defined $options{'p'} ? $options{'p'} : 5);
 $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
 my $ops = (defined $options{'o'} ? $options{'o'} : 'TOP10WEIGHTED');
-my $inputfile  = $options{'i'};
 
+die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==$genestrandcolumn;
 if ($geneanncolumn <= 3) {
   $geneanncolumn = 4;
   warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)";
@@ -64,7 +66,6 @@ if (defined $options{'n'} && !defined $options{'e'}) {
   $exonanncolumn = 5;
   warn "Custom exon annotation column provided without custom exon file - defaulting to standard exon annotation column (5)";
 }
-die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==$genestrandcolumn;
 
 my @ops = uniq(split(/,/,$ops));
 my %operations = (); # Hash of chosen operations
@@ -86,27 +87,29 @@ if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon fil
   print STDERR "Generating exon file: $exonfile\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -k 1,1V -k 2,2n | uniq > refGene.exons.b37.bed");
 } elsif ($exonfile ne 'refGene.exons.b37.bed' && !-s $exonfile) {
-  die "$exonfile not found or empty!";
+  die "Exon file $exonfile not found or empty!";
 }
 
-my ($geneprefix) = ($genefile =~ /^(?:.*\/)?(.*)\.bed(?:\.gz)?$/);
-my ($exonprefix) = ($exonfile =~ /^(?:.*\/)?(.*)\.bed(?:\.gz)?$/);
-my $intronfile = "svscoretmp/introns.$geneprefix.$exonprefix.bed.gz";
-if ($genefile eq 'refGene.genes.b37.bed.gz' && !-s $genefile && !-s $intronfile) { # Generate gene file if necessary
+if ($genefile eq 'refGene.genes.b37.bed.gz' && !-s $genefile) { # Generate gene file if necessary
   print STDERR "Generating gene file: $genefile\n" if $debug;
   system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$13,\$4}' OFS=\"\\t\" | sort -k 1,1V -k 2,2n | uniq | bgzip -c > refGene.genes.b37.bed.gz");
 } elsif ($genefile ne 'refGene.genes.b37.bed.gz' && !-s $genefile) {
-  die "$genefile not found or empty!";
+  die "Gene file $genefile not found or empty!";
 }
+my ($geneprefix) = ($genefile =~ /^(?:.*\/)?(.*)\.bed(?:\.gz)?$/);
+my ($exonprefix) = ($exonfile =~ /^(?:.*\/)?(.*)\.bed(?:\.gz)?$/);
+my $intronfile = "svscoretmp/introns.$geneprefix.$exonprefix.bed.gz";
+
+my @todelete = (); # List of files to delete at end of run
 
 # Zip/unzip annotation files as necessary
 if ($genefile =~ /\.gz/) {
   ($uncompressedgenefile) = ($genefile =~ /(.*)\.gz$/);
   unless (-s $uncompressedgenefile) {
-    $alteredgenefile = 1;
+    push @todelete, $uncompressedgenefile unless $debug;
     print STDERR "Unzipping $genefile\n" if $debug;
     if (system("zcat $genefile > $uncompressedgenefile")) {
-      die "Unzipping $genefile failed: $!";
+      die "Unzipping $genefile failed;;" . join(',',@todelete);
     }
   }
 } else {
@@ -116,20 +119,20 @@ if ($genefile =~ /\.gz/) {
 if ($exonfile =~ /\.gz/) {
   ($uncompressedexonfile) = ($exonfile =~ /(.*)\.gz$/);
   unless (-s $uncompressedexonfile) {
-    $alteredexonfile = 1;
+    push @todelete, $uncompressedexonfile unless $debug;
     print STDERR "Unzipping $exonfile\n" if $debug;
     if (system("zcat $exonfile > $uncompressedexonfile")) {
-      die "Unzipping $exonfile failed: $!";
+      die "Unzipping $exonfile failed;;" . join(',',@todelete);
     }
   }
 } else {
   $uncompressedexonfile = $exonfile;
   $compressedexonfile = "$exonfile.gz";
   unless(-s $compressedexonfile) {
-    $alteredexonfile = 1;
+    push @todelete, $compressedexonfile unless $debug;
     print STDERR "Zipping $exonfile\n" if $debug;
     if (system("bgzip -c $exonfile > $compressedexonfile")) {
-      die "Compressing $exonfile failed: $!";
+      die "Compressing $exonfile failed;;" . join(',',@todelete);
     }
   }
 }
@@ -137,21 +140,24 @@ if ($exonfile =~ /\.gz/) {
 mkdir "svscoretmp" unless -d "svscoretmp";
 
 unless (-s "$intronfile") { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming intron file has no header line) and sort
+  push @todelete, $intronfile unless $debug;
   print STDERR "Generating intron file\n" if $debug;
   system("bedtools subtract -a $uncompressedgenefile -b $uncompressedexonfile | sort -u -k1,1V -k2,2n | awk '{print \$0 \"\t\" NR}' | bgzip -c > $intronfile");
 }
 
 # Use tabix to index the annotation files
 unless (-s "$intronfile.tbi") {
+  push @todelete, "$intronfile.tbi" unless $debug;
   print STDERR "Tabix indexing $intronfile\n" if $debug;
   if(system("tabix -fp bed $intronfile")) {
-    die "Tabix failed on $intronfile";
+    die "Tabix failed on $intronfile;;" . join(',',@todelete);
   }
 }
 unless (-s "$compressedexonfile.tbi") {
+  push @todelete, "$compressedexonfile.tbi" unless $debug;
   print STDERR "Tabix indexing $compressedexonfile\n" if $debug;
   if(system("tabix -fp bed $compressedexonfile")) {
-    die "Tabix failed on $compressedexonfile";
+    die "Tabix failed on $compressedexonfile;;" . join(',',@todelete);
   }
 }
 
@@ -161,11 +167,8 @@ chomp $intronnumcolumn;
 
 # Write conf.toml file
 print STDERR "Writing config file\n" if $debug;
-unless (open(CONFIG, "> conf.toml")) {
-  unlink $intronfile,"$intronfile.tbi";
-  deletesvscoretmp();
-  die "Could not open conf.toml: $!";
-}
+open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!;;" . join(',',@todelete);
+push @todelete, "conf.toml" unless $debug;
 print CONFIG "[[annotation]]\nfile=\"$compressedexonfile\"\nnames=[\"ExonGene\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\",\"IntronGene\"]\ncolumns=[$intronnumcolumn,4]\nops=[\"concat\",\"concat\"]\n";
 close CONFIG;
 
@@ -174,11 +177,8 @@ my ($prefix,$tempfile);
 my $time = gettimeofday();
 if ($inputfile eq "stdin") { # Write standard input to temp file if input file comes from STDIN
   $tempfile = "svscoretmp/stdin$time.vcf";
-  unless(open(TEMP,">$tempfile")) {
-    unlink $intronfile,"$intronfile.tbi";
-    deletesvscoretmp();
-    die "Could not open $tempfile for writing; $!";
-  }
+  open(TEMP,">$tempfile") || die "Could not open $tempfile for writing; $!;;" . join(',',@todelete);
+  push @todelete, $tempfile unless $debug;
   print TEMP <STDIN>;
   close TEMP;
 }
@@ -191,61 +191,37 @@ if ($inputfile eq "stdin") {
   ($prefix) = ($inputfile =~ /^(?:.*\/)?(.*)\.vcf(?:\.gz)?$/);
 }
 
-# Make sure header is present in input file
-unless(open(HEADERCHECK, "< $inputfile")) {
-  unlink $intronfile,"$intronfile.tbi";
-  deletesvscoretmp();
-  die "Could not open $inputfile: $!";
-}
-my $firstline = <HEADERCHECK>;
-close HEADERCHECK;
-unless($firstline =~ /^#/) {
-  unlink $intronfile,"$intronfile.tbi";
-  deletesvscoretmp();
-  die "***Missing header on input file";
-}
-
 # Tag intermediate files with timestamp to avoid collisions
 $preprocessedfile = "svscoretmp/$prefix$time.preprocess.bedpe";
 $sortedfile = "svscoretmp/$prefix$time.sort.vcf.gz";
 if ($compressed) {
   if (system("gunzip -c $inputfile > svscoretmp/$prefix$time.vcf")) {
-    unlink $intronfile,"$intronfile.tbi";
-    deletesvscoretmp();
-    die "Could not unzip $inputfile: $!";
+    die "Could not unzip $inputfile;;" . join(',',@todelete);
   } else {
     $inputfile = "svscoretmp/$prefix$time.vcf";
+    push @todelete, $inputfile unless $debug;
   }
 }
-my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile | svtools vcftobedpe > $preprocessedfile; rm -f $sortedfile"; # Sort, annotate, reorder header, convert to BEDPE
+
+# Make sure header is present in input file
+open(HEADERCHECK, "< $inputfile") || die "Could not open $inputfile: $!;;" . join(',',@todelete);
+my $firstline = <HEADERCHECK>;
+close HEADERCHECK;
+die "***Missing header on input file;;" . join(',',@todelete) unless($firstline =~ /^#/);
+
+my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile | svtools vcftobedpe > $preprocessedfile"; # Sort, annotate, reorder header, convert to BEDPE
+push @todelete, $preprocessedfile, $sortedfile unless $debug;
 print STDERR "Preprocessing command:\n$preprocess\n" if $debug;
-if (system($preprocess) || -z $preprocessedfile) {
-  unless ($debug) {
-    unlink $preprocessedfile,$sortedfile,$intronfile,"$intronfile.tbi";
-    deletesvscoretmp();
-  }
-  die "Preprocessing failed: $!"
-}
+die "Preprocessing failed;;" . join(',',@todelete) if (system($preprocess) || -z $preprocessedfile);
 
 $bedpeout = "svscoretmp/$prefix$time.out.bedpe";
 $vcfout = "svscoretmp/$prefix$time.out.vcf";
-unless(open(IN, "< $preprocessedfile")) {
-  unlink $preprocessedfile,$sortedfile,$intronfile,"$intronfile.tbi";
-  deletesvscoretmp();
-  die "Could not open $preprocessedfile: $!";
-}
-unless(open(OUT, "> $bedpeout")) {
-  unlink $preprocessedfile,$sortedfile,$intronfile,"$intronfile.tbi";
-  deletesvscoretmp();
-  die "Could not open output file: $!";
-}
+open(IN, "< $preprocessedfile") || die "Could not open $preprocessedfile: $!;;" . join(',',@todelete);
+open(OUT, "> $bedpeout") || die "Could not open output file: $!;;" . join(',',@todelete);
+push @todelete, $bedpeout unless $debug;
 
 # Update header
-unless(open(HEADER, "grep \"^#\" $preprocessedfile |")) {
-  unlink $preprocessedfile,$sortedfile,$intronfile,"$intronfile.tbi";
-  deletesvscoretmp();
-  die "Error grabbing header: $!";
-}
+open(HEADER, "grep \"^#\" $preprocessedfile |") || die "Error grabbing header: $!;;" . join(',',@todelete);
 my @newheader = ();
 my @oldheader = <HEADER>;
 close HEADER;
@@ -325,11 +301,7 @@ foreach (uniq(@newheader)) {
 
 print STDERR "Reading gene list\n" if $debug;
 my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
-unless(open(GENES, "$uncompressedgenefile")) {
-  unlink $preprocessedfile,$sortedfile,$intronfile,"$intronfile.tbi";
-  deletesvscoretmp();
-  die "Could not open $genefile: $!";
-}
+open(GENES, "$uncompressedgenefile") || die "Could not open $genefile: $!;;" . join(',',@todelete);
 foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, and first and last bases (in VCF coordinates) of each gene
   my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = (split(/\s+/,$geneline))[0..2,$geneanncolumn-1,$genestrandcolumn-1];
   $genestart++;
@@ -343,12 +315,7 @@ foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, st
 close GENES;
 
 # Perform sanity check to make sure annotation columns are specified correctly
-unless(open(EXONS, "$uncompressedexonfile")) {
-  unlink $uncompressedexonfile if $alteredexonfile && $exonfile =~ /\.gz$/;
-  unlink $compressedexonfile if $alteredexonfile && $exonfile !~ /\.gz$/;
-  unlink $uncompressedgenefile if $alteredgenefile && $genefile =~ /\.gz$/;
-  die "Could not open $exonfile: $!";
-}
+open(EXONS, "$uncompressedexonfile") || die "Could not open $exonfile: $!;;" . join(',',@todelete);
 
 my $count = 1;
 my $genesfound = 0;
@@ -389,13 +356,7 @@ while (my $inputline = <IN>) {
 
   $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
   $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
-#  if ($svtype eq "INS") {
-#    $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart-10, $leftstart, -1);
-#    $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstop, $rightstop+10, -1);
-#  } else {
-#    $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
-#    $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
-#  }
+  
   if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
     if ($rightstop - $leftstart > 1000000) {
       $scores{"SPAN"} = (100) x @ops;
@@ -502,30 +463,36 @@ close OUT;
 system("svtools bedpetovcf -b $bedpeout > $vcfout");
 system("grep \"^#\" $vcfout > $vcfout.header");
 print `grep -v "^#" $vcfout | sort -k1,1V -k2,2n | cat $vcfout.header -`;
-unlink "$vcfout.header";
+push @todelete, $vcfout,"$vcfout.header";
 
-# Clean up
-unless ($debug) {
-  unlink $preprocessedfile,$vcfout,$bedpeout,$intronfile,"$intronfile.tbi";
-  unlink $inputfile if $compressed || $prefix eq "stdin";
-  
-  if ($alteredexonfile) {
-    if ($exonfile =~ /\.gz$/) {
-      unlink $uncompressedexonfile;
-    } else {
-      unlink $compressedexonfile;
-    }
-  }
+die ";;" . join(',',@todelete); ## Signal to the rest of the program that the eval block terminated successfully
+};
 
-  if ($alteredgenefile) {
-    if ($genefile =~ /\.gz$/) {
-      unlink $uncompressedgenefile;
-    }
-  }
-
-  deletesvscoretmp();
-  closedir(DIR);
+my ($error,$todelete) = split(/;;/,$@);
+if ($todelete) {
+  $todelete = (split(/ at /,$todelete))[0];
+  my @todelete = split(/,/,$todelete);
+  unlink @todelete;
 }
+
+# Delete svscoretmp if it's now empty
+if (-d "svscoretmp") {
+  opendir(DIR,"svscoretmp");
+  my @dir = readdir(DIR);
+  my $dircount = @dir;
+  foreach (@dir) {
+    $dircount-- if ($_ eq '.' || $_ eq '..');
+  }
+  if ($dircount == 0) {
+    if(system("rmdir svscoretmp")) {
+      warn "Could not delete svscoretmp";
+    }
+  }
+  close DIR;
+}
+
+chomp $error;
+print STDERR "$error\n" if $error; # Relay error from eval to STDERR
 
 sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. For left/right breakends, $start is the first possible breakpoint, and $stop is the final possible breakpoint (in BED coordinates). For span/truncation scores, [$start,$stop] is an inclusive interval of all the affected bases (in VCF coordinates). cscoreop will return -1 for any weighted operation on a variant without a PRPOS field. Giving -1 as $prpos signifies that scores should not be weighted (i.e. the score is a span/truncation score), while giving "" as $prpos signifies that the variant has no PRPOS field
   my ($filename, $ops, $chrom, $start, $stop, $prpos) = @_;
@@ -686,20 +653,6 @@ sub replaceoraddfield {
     $info .= (";$field=$newscore");
   }
   return $info;
-}
-
-sub deletesvscoretmp { # Delete svscoretmp if empty
-  opendir(DIR,"svscoretmp");
-  my @dir = readdir(DIR);
-  my $dircount = @dir;
-  foreach (@dir) {
-    $dircount-- if ($_ eq '.' || $_ eq '..');
-  }
-  if ($dircount == 0) {
-    if(system("rmdir svscoretmp")) {
-      warn "Could not delete svscoretmp: $!";
-    }
-  }
 }
 
 sub main::HELP_MESSAGE() {
