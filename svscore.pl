@@ -15,57 +15,29 @@ sub main::HELP_MESSAGE(); # Declaration to make perl happy
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
 $main::VERSION = '0.5';
 
-eval {
+eval { # Catch errors
   my %possibleoperations = ("MAX", 1, "SUM", 1, "TOP", 1, "MEAN", 1, "MEANWEIGHTED", 1, "TOPWEIGHTED", 1); # Hash of supported operations
   my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "CNV", "MEI", "INS"); # Hash of supported svtypes
   my %truncationtypes = map {$_ => 1} ("INV","INS","DEL"); # All svtypes for which truncation scores are calculated
   my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
   my %options = ();
-  getopts('dvc:g:e:m:o:p:i:n:',\%options);
+  getopts('dvi:c:f:e:o:',\%options);
 
 # Parse command line options, set variables, check input parameters
   my $debug = defined $options{'d'};
   my $verbose = defined $options{'v'};
-
   my $inputfile  = $options{'i'};
   &main::HELP_MESSAGE() && die unless defined $inputfile;
   die "Could not find input file $inputfile" unless (-s $inputfile || $inputfile eq "stdin");
   my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
   die "Could not find CADD file $caddfile" unless -s $caddfile;
-  my $genefile = (defined $options{'g'} ? $options{'g'} : 'refGene.genes.b37.bed.gz');
-  my $geneanncolumn = (defined $options{'m'} ? $options{'m'} : 4);
-  my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.b37.bed');
-  my $exonanncolumn = (defined $options{'n'} ? $options{'n'} : ($exonfile eq 'refGene.exons.b37.bed' ? 5 : 4));
-  my $genestrandcolumn = (defined $options{'p'} ? $options{'p'} : 5);
+  my $intronfile = (defined $options{'f'} ? $options{'f'} : 'refGene.introns.bed');
+  die "Could not find intron file $intronfile" unless -s $intronfile;
+  my $exonfile = (defined $options{'e'} ? $options{'e'} : 'refGene.exons.bed');
+  die "Could not find exon file $exonfile" unless -s $exonfile;
   $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
   my $ops = (defined $options{'o'} ? $options{'o'} : 'TOP10WEIGHTED');
-
-  die "Gene annotation column cannot equal gene strand column" if $geneanncolumn==$genestrandcolumn;
-  if ($geneanncolumn <= 3) {
-    $geneanncolumn = 4;
-    warn "Gene annotation column must be greater than 3 - defaulting to standard gene annotation column (4)";
-  }
-  if ($genestrandcolumn <= 3) {
-    $genestrandcolumn = 5;
-    warn "Gene annotation column must be greater than 3 - defaulting to standard gene strand column (5)";
-  }
-  if ($exonanncolumn <= 3) {
-    $exonanncolumn = 5;
-    warn "Exon annotation column must be greater than 3 - defaulting to standard exon annotation column (5)";
-  }
-  if (defined $options{'m'} && !defined $options{'g'}) {
-    $geneanncolumn = 4;
-    warn "Custom gene annotation column provided without custom gene file - defaulting to standard gene annotation column (4)";
-  }
-  if (defined $options{'p'} && !defined $options{'g'}) {
-    $genestrandcolumn = 5;
-    warn "Custom gene strand column provided without custom gene annotation file - defaulting to standard gene strand column (5)";
-  }
-  if (defined $options{'n'} && !defined $options{'e'}) {
-    $exonanncolumn = 5;
-    warn "Custom exon annotation column provided without custom exon file - defaulting to standard exon annotation column (5)";
-  }
 
   my @ops = uniq(split(/,/,$ops));
   my %operations = (); # Hash of chosen operations
@@ -80,43 +52,34 @@ eval {
   }
 
   my $compressed = ($inputfile =~ /\.gz$/);
-  my ($uncompressedgenefile, $uncompressedexonfile, $compressedexonfile, $alteredgenefile, $alteredexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
-
-# Set up all necessary preprocessing to be taken care of before analysis can begin. This includes decompression, annotation using vcfanno, and generation of intron/exon/gene files, whichever are necessary
-  if ($exonfile eq 'refGene.exons.b37.bed' && !-s $exonfile) { # Generate exon file if necessary
-    print STDERR "Generating exon file: $exonfile\n" if $debug;
-    system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); n=int(\$9); split(\$10,start,\",\");split(\$11,end,\",\"); for(i=1;i<=n;++i) {print \$3,start[i],end[i],\$2\".\"i,\$13,\$2; } }' OFS=\"\t\" | sort -k 1,1V -k 2,2n | uniq > refGene.exons.b37.bed");
-  } elsif ($exonfile ne 'refGene.exons.b37.bed' && !-s $exonfile) {
-    die "Exon file $exonfile not found or empty!";
-  }
-
-  if ($genefile eq 'refGene.genes.b37.bed.gz' && !-s $genefile) { # Generate gene file if necessary
-    print STDERR "Generating gene file: $genefile\n" if $debug;
-    system("curl -s \"http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz\" | gzip -cdfq | awk '{gsub(\"^chr\",\"\",\$3); print \$3,\$5,\$6,\$13,\$4}' OFS=\"\\t\" | sort -k 1,1V -k 2,2n | uniq | bgzip -c > refGene.genes.b37.bed.gz");
-  } elsif ($genefile ne 'refGene.genes.b37.bed.gz' && !-s $genefile) {
-    die "Gene file $genefile not found or empty!";
-  }
-  my ($geneprefix) = ($genefile =~ /^(?:.*\/)?(.*)\.bed(?:\.gz)?$/);
-  my ($exonprefix) = ($exonfile =~ /^(?:.*\/)?(.*)\.bed(?:\.gz)?$/);
-  my $intronfile = "svscoretmp/introns.$geneprefix.$exonprefix.bed.gz";
-
+  my ($compressedintronfile, $uncompressedintronfile, $uncompressedexonfile, $compressedexonfile, $headerfile, $sortedfile, $preprocessedfile, $bedpeout, $vcfout);
   my @todelete = (); # List of files to delete at end of run
 
 # Zip/unzip annotation files as necessary
-  if ($genefile =~ /\.gz/) {
-    ($uncompressedgenefile) = ($genefile =~ /(.*)\.gz$/);
-    unless (-s $uncompressedgenefile) {
-      push @todelete, $uncompressedgenefile unless $debug;
-      print STDERR "Unzipping $genefile\n" if $debug;
-      if (system("zcat $genefile > $uncompressedgenefile")) {
-	die "Unzipping $genefile failed;;" . join(',',@todelete);
+  if ($intronfile =~ /\.gz$/) {
+    $compressedintronfile = $intronfile;
+    ($uncompressedintronfile) = ($intronfile =~ /(.*)\.gz$/);
+    unless (-s $uncompressedintronfile) {
+      push @todelete, $uncompressedintronfile unless $debug;
+      print STDERR "Unzipping $intronfile\n" if $debug;
+      if (system("zcat $intronfile > $uncompressedintronfile")) {
+	die "Unzipping $intronfile failed;;" . join(',',@todelete);
       }
     }
   } else {
-    $uncompressedgenefile = $genefile;
+    $uncompressedintronfile = $intronfile;
+    $compressedintronfile = "$intronfile.gz";
+    unless(-s $compressedintronfile) {
+      push @todelete, $compressedintronfile unless $debug;
+      print STDERR "Zipping $intronfile\n" if $debug;
+      if (system("bgzip -c $intronfile > $compressedintronfile")) {
+	die "Compressing $intronfile failed;;" . join(',',@todelete);
+      }
+    }
   }
 
-  if ($exonfile =~ /\.gz/) {
+  if ($exonfile =~ /\.gz$/) {
+    $compressedexonfile = $exonfile;
     ($uncompressedexonfile) = ($exonfile =~ /(.*)\.gz$/);
     unless (-s $uncompressedexonfile) {
       push @todelete, $uncompressedexonfile unless $debug;
@@ -139,18 +102,12 @@ eval {
 
   mkdir "svscoretmp" unless -d "svscoretmp";
 
-  unless (-s "$intronfile") { # Generate intron file if necessary - add column with unique intron ID equal to line number (assuming intron file has no header line) and sort
-    push @todelete, $intronfile unless $debug;
-    print STDERR "Generating intron file\n" if $debug;
-    system("bedtools subtract -a $uncompressedgenefile -b $uncompressedexonfile | sort -u -k1,1V -k2,2n | awk '{print \$0 \"\t\" NR}' | bgzip -c > $intronfile");
-  }
-
 # Use tabix to index the annotation files
-  unless (-s "$intronfile.tbi") {
-    push @todelete, "$intronfile.tbi" unless $debug;
-    print STDERR "Tabix indexing $intronfile\n" if $debug;
-    if(system("tabix -fp bed $intronfile")) {
-      die "Tabix failed on $intronfile;;" . join(',',@todelete);
+  unless (-s "$compressedintronfile.tbi") {
+    push @todelete, "$compressedintronfile.tbi" unless $debug;
+    print STDERR "Tabix indexing $compressedintronfile\n" if $debug;
+    if(system("tabix -fp bed $compressedintronfile")) {
+      die "Tabix failed on $compressedintronfile;;" . join(',',@todelete);
     }
   }
   unless (-s "$compressedexonfile.tbi") {
@@ -161,15 +118,11 @@ eval {
     }
   }
 
-  my $intronnumcolumn = `zcat $intronfile | head -n 1 | awk '{print NF}'`; # Figure out which column has the intron number
-  $intronnumcolumn = 6 unless $intronnumcolumn;
-  chomp $intronnumcolumn;
-
 # Write conf.toml file
   print STDERR "Writing config file\n" if $debug;
   open(CONFIG, "> conf.toml") || die "Could not open conf.toml: $!;;" . join(',',@todelete);
   push @todelete, "conf.toml" unless $debug;
-  print CONFIG "[[annotation]]\nfile=\"$compressedexonfile\"\nnames=[\"ExonGene\"]\ncolumns=[$exonanncolumn]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$intronfile\"\nnames=[\"Intron\",\"IntronGene\"]\ncolumns=[$intronnumcolumn,4]\nops=[\"concat\",\"concat\"]\n";
+  print CONFIG "[[annotation]]\nfile=\"$compressedexonfile\"\nnames=[\"ExonTranscript\"]\ncolumns=[4]\nops=[\"uniq\"]\n\n[[annotation]]\nfile=\"$compressedintronfile\"\nnames=[\"Intron\",\"IntronTranscript\"]\ncolumns=[5,4]\nops=[\"concat\",\"concat\"]\n";
   close CONFIG;
 
 # Create first preprocessing command - annotation is done without normalization because REF and ALT nucleotides are not included in VCFs describing SVs
@@ -203,12 +156,6 @@ eval {
     }
   }
 
-# Make sure header is present in input file
-  open(HEADERCHECK, "< $inputfile") || die "Could not open $inputfile: $!;;" . join(',',@todelete);
-  my $firstline = <HEADERCHECK>;
-  close HEADERCHECK;
-  die "***Missing header on input file;;" . join(',',@todelete) unless($firstline =~ /^#/);
-
   my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile | svtools vcftobedpe > $preprocessedfile"; # Sort, annotate, reorder header, convert to BEDPE
   push @todelete, $preprocessedfile, $sortedfile unless $debug;
   print STDERR "Preprocessing command:\n$preprocess\n" if $debug;
@@ -225,6 +172,7 @@ eval {
   my @newheader = ();
   my @oldheader = <HEADER>;
   close HEADER;
+  die "***Missing header on input file;;" . join(',',@todelete) unless($oldheader[0] =~ /^#/);
 
   if ($ops =~ /WEIGHTED/ && !(grep {/^##INFO=<ID=PRPOS,/} @oldheader)) { # If an op is weighted, but PRPOS is absent from the header, switch to unweighted operations with a warning
     warn "*****PRPOS not found in header - switching to unweighted operations*****\n";
@@ -266,8 +214,8 @@ eval {
       push @newheader, "##INFO=<ID=SVSCOREMAX_LEFT,Number=1,Type=Float,Description=\"Maximum C score in left breakend of structural variant\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMAX_RIGHT,Number=1,Type=Float,Description=\"Maximum C score in right breakend of structural variant\">\n";
       push @newheader, "##INFO=<ID=SVSCOREMAX_SPAN,Number=1,Type=Float,Description=\"Maximum C score in span of structural variant\">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMAX_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of truncated gene\">\n";
-      push @newheader, "##INFO=<ID=SVSCOREMAX_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of truncated gene\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMAX_LTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of left breakend to end of truncated transcript\">\n";
+      push @newheader, "##INFO=<ID=SVSCOREMAX_RTRUNC,Number=1,Type=Float,Description=\"Maximum C score from beginning of right breakend to end of truncated transcript\">\n";
     }
   }
   if (defined $operations{"SUM"}) {
@@ -276,8 +224,8 @@ eval {
       push @newheader, "##INFO=<ID=SVSCORESUM_LEFT,Number=1,Type=Float,Description=\"Sum of C scores in left breakend of structural variant\">\n";
       push @newheader, "##INFO=<ID=SVSCORESUM_RIGHT,Number=1,Type=Float,Description=\"Sum of C scores in right breakend of structural variant\">\n";
       push @newheader, "##INFO=<ID=SVSCORESUM_SPAN,Number=1,Type=Float,Description=\"Sum of C scores in outer span of structural variant\">\n";
-      push @newheader, "##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of truncated gene\">\n";
-      push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of truncated gene\">\n";
+      push @newheader, "##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of left breakend to end of truncated transcript\">\n";
+      push @newheader, "##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description=\"Sum of C scores from beginning of right breakend to end of truncated transcript\">\n";
     }
   }
   foreach my $op (@ops) {
@@ -289,8 +237,8 @@ eval {
 	push @newheader, "##INFO=<ID=SVSCORE${op}_LEFT,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores in left breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
 	push @newheader, "##INFO=<ID=SVSCORE${op}_RIGHT,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores in right breakend of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
 	push @newheader, "##INFO=<ID=SVSCORE${op}_SPAN,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores in outer span of structural variant" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-	push @newheader, "##INFO=<ID=SVSCORE${op}_LTRUNC,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores from beginning of left breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
-	push @newheader, "##INFO=<ID=SVSCORE${op}_RTRUNC,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores from beginning of right breakend to end of truncated gene" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+	push @newheader, "##INFO=<ID=SVSCORE${op}_LTRUNC,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores from beginning of left breakend to end of truncated transcript" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
+	push @newheader, "##INFO=<ID=SVSCORE${op}_RTRUNC,Number=1,Type=Float,Description=\"Mean of " . ($n ? "top $n " : "") . "C scores from beginning of right breakend to end of truncated transcript" . ($weighted ? ", weighted by probability distribution" : "") . "\">\n";
       }
     }
   }
@@ -299,37 +247,20 @@ eval {
     print OUT;
   }
 
-  print STDERR "Reading gene list\n" if $debug;
-  my %genes = (); # Symbol => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
-  open(GENES, "$uncompressedgenefile") || die "Could not open $genefile: $!;;" . join(',',@todelete);
-  foreach my $geneline (<GENES>) { # Parse gene file, recording the chromosome, strand, and first and last bases (in VCF coordinates) of each gene
-    my ($genechrom, $genestart, $genestop, $genesymbol, $genestrand) = (split(/\s+/,$geneline))[0..2,$geneanncolumn-1,$genestrandcolumn-1];
-    $genestart++;
-    if (defined $genes{$genesymbol}->{$genechrom}) { ## Assume strand stays constant
-      $genes{$genesymbol}->{$genechrom}->[0] = min($genes{$genesymbol}->{$genechrom}->[0], $genestart);
-      $genes{$genesymbol}->{$genechrom}->[1] = max($genes{$genesymbol}->{$genechrom}->[1], $genestop);
+  print STDERR "Reading transcript list\n" if $debug;
+  my %transcripts = (); # Transcript name => (Chrom => (chrom, start, stop, strand)); Hash of hashes of arrays
+  open(EXONS, "$uncompressedexonfile") || die "Could not open $uncompressedexonfile: $!;;" . join(',',@todelete);
+  foreach my $exonline (<EXONS>) { # Parse exon file, recording the chromosome, strand, and first and last bases (in VCF coordinates) of each transcript
+    my ($transcriptchrom, $transcriptname, $transcriptstart, $transcriptstop, $transcriptstrand) = (split(/\s+/,$exonline))[0,3,4..6];
+    $transcriptstart++;
+    if (defined $transcripts{$transcriptname}->{$transcriptchrom}) { ## Assume strand stays constant
+      $transcripts{$transcriptname}->{$transcriptchrom}->[0] = min($transcripts{$transcriptname}->{$transcriptchrom}->[0], $transcriptstart);
+      $transcripts{$transcriptname}->{$transcriptchrom}->[1] = max($transcripts{$transcriptname}->{$transcriptchrom}->[1], $transcriptstop);
     } else {
-      $genes{$genesymbol}->{$genechrom} = [$genestart, $genestop, $genestrand];
-    }
-  }
-  close GENES;
-
-# Perform sanity check to make sure annotation columns are specified correctly
-  open(EXONS, "$uncompressedexonfile") || die "Could not open $exonfile: $!;;" . join(',',@todelete);
-
-  my $count = 1;
-  my $genesfound = 0;
-  while(defined(my $line = <EXONS>) && $count <= 10) {
-    $count++;
-    my $line = <EXONS>;
-    my $symbol = (split(/\s+/,$line))[$exonanncolumn-1];
-    if (exists $genes{$symbol}) {
-      $genesfound++;
-      last;
+      $transcripts{$transcriptname}->{$transcriptchrom} = [$transcriptstart, $transcriptstop, $transcriptstrand];
     }
   }
   close EXONS;
-  warn "************First 10 genes in exon file not found in genes file. Are your annotation columns (-m and -n) specified correctly?" unless $genesfound;
 
   print STDERR "Entering loop\n" if $debug;
   while (my $inputline = <IN>) {
@@ -369,64 +300,64 @@ eval {
     if (exists $truncationtypes{$svtype}) {
       
       # Get vcfanno annotations
-      my ($leftexongenenames, $rightexongenenames, $leftintrons, $rightintrons, $leftintrongenenames, $rightintrongenenames);
+      my ($leftexontranscriptnames, $rightexontranscriptnames, $leftintrons, $rightintrons, $leftintrontranscriptnames, $rightintrontranscriptnames);
       if ($info_b eq ".") { # Single line variant in VCF
-	($leftexongenenames,$rightexongenenames) = getfields($info_a,"left_ExonGene","right_ExonGene");
+	($leftexontranscriptnames,$rightexontranscriptnames) = getfields($info_a,"left_ExonTranscript","right_ExonTranscript");
 	($leftintrons,$rightintrons) = getfields($info_a,"left_Intron","right_Intron");
-	($leftintrongenenames,$rightintrongenenames) = getfields($info_a,"left_IntronGene","right_IntronGene");
+	($leftintrontranscriptnames,$rightintrontranscriptnames) = getfields($info_a,"left_IntronTranscript","right_IntronTranscript");
       } else { # Multiline variant in VCF (possibly only one line of variant present)
-	$leftexongenenames = getfields($info_a,"ExonGene");
-	$leftintrongenenames = getfields($info_a,"IntronGene");
+	$leftexontranscriptnames = getfields($info_a,"ExonTranscript");
+	$leftintrontranscriptnames = getfields($info_a,"IntronTranscript");
 	$leftintrons = getfields($info_a,"Intron");
 	$rightintrons = getfields($info_b,"Intron");
-	$rightexongenenames = getfields($info_b,"ExonGene");
-	$rightintrongenenames = getfields($info_b,"IntronGene");
+	$rightexontranscriptnames = getfields($info_b,"ExonTranscript");
+	$rightintrontranscriptnames = getfields($info_b,"IntronTranscript");
       }
 
-      # We want to make sure we don't consider any variant which is contained within an intron. To do this, we want to cancel out any introns present in both $leftintrons and $rightintrons. However, because a breakend's confidence interval may extend into multiple introns, we can't just exclude any gene with an intron in both lists, or we would miss some truly gene-truncating variants. So, we start by considering truncated the genes whose exons are affected ($leftexongenenames and $rightexongenenames). We then count the number of instances of each gene in $leftintrongenenames and $rightintrongenenames. Next, we reduce the number of instances of each gene by 1 for each of its introns which occurs in both $leftintrons and $rightintrons, as this means this variant is confined to that intron, so that intron does not provide evidence of a truncation. Any genes left with at least one instance in %leftintrongenenames are then considered truncated, and are added back to %lefttruncatedgenes and %righttruncatedgenes. Genes contained within the span of a DEL are not considered truncating because they are already captured by the SPAN score
-      # %lefttruncatedgenes and %righttruncatedgenes are {gene => 1}
-      # %leftintrongenenames and %rightintrongenenames are {gene => # of instances in $leftgenenames or $rightgenenames}
-      # %leftintrons and %rightintrons are {number of intron hit by the left or right breakend => name of gene}
+      # We want to make sure we don't consider any variant which is contained within an intron. To do this, we want to cancel out any introns present in both $leftintrons and $rightintrons. However, because a breakend's confidence interval may extend into multiple introns, we can't just exclude any transcript with an intron in both lists, or we would miss some truly transcript-truncating variants. So, we start by considering truncated the transcripts whose exons are affected ($leftexontranscriptnames and $rightexontranscriptnames). We then count the number of instances of each transcript in $leftintrontranscriptnames and $rightintrontranscriptnames. Next, we reduce the number of instances of each transcript by 1 for each of its introns which occurs in both $leftintrons and $rightintrons, as this means this variant is confined to that intron, so that intron does not provide evidence of a truncation. Any transcripts left with at least one instance in %leftintrontranscriptnames are then considered truncated, and are added back to %lefttruncatedtranscripts and %righttruncatedtranscripts. Transcripts contained within the span of a DEL are not considered truncating because they are already captured by the SPAN score
+      # %lefttruncatedtranscripts and %righttruncatedtranscripts are {transcript => 1}
+      # %leftintrontranscriptnames and %rightintrontranscriptnames are {transcript => # of instances in $lefttranscriptnames or $righttranscriptnames}
+      # %leftintrons and %rightintrons are {number of intron hit by the left or right breakend => name of transcript}
       
-      my %lefttruncatedgenes = map {$_ => 1} (split(/\|/,$leftexongenenames));
-      my %righttruncatedgenes = map {$_ => 1} (split(/\|/,$rightexongenenames));
+      my %lefttruncatedtranscripts = map {$_ => 1} (split(/\|/,$leftexontranscriptnames));
+      my %righttruncatedtranscripts = map {$_ => 1} (split(/\|/,$rightexontranscriptnames));
 
-      my (%leftintrongenenames,%rightintrongenenames);
+      my (%leftintrontranscriptnames,%rightintrontranscriptnames);
       my @leftintrons = split(/\|/,$leftintrons);
-      my @leftintrongenenames = split(/\|/,$leftintrongenenames);
-      my %leftintrons = map {$leftintrons[$_] => $leftintrongenenames[$_]} (0..$#leftintrons); # @leftintrons and @leftintrongenes should have the same number of elements if vcfanno is working as it should
+      my @leftintrontranscriptnames = split(/\|/,$leftintrontranscriptnames);
+      my %leftintrons = map {$leftintrons[$_] => $leftintrontranscriptnames[$_]} (0..$#leftintrons); # @leftintrons and @leftintrontranscripts should have the same number of elements if vcfanno is working as it should
       my @rightintrons = split(/\|/,$rightintrons);
-      my @rightintrongenenames = split(/\|/,$rightintrongenenames);
-      my %rightintrons = map {$rightintrons[$_] => $rightintrongenenames[$_]} (0..$#rightintrons);
+      my @rightintrontranscriptnames = split(/\|/,$rightintrontranscriptnames);
+      my %rightintrons = map {$rightintrons[$_] => $rightintrontranscriptnames[$_]} (0..$#rightintrons);
 
-      foreach (@leftintrongenenames) {
-	$leftintrongenenames{$_}++; # Count instances of genes in @leftintrongenenames
+      foreach (@leftintrontranscriptnames) {
+	$leftintrontranscriptnames{$_}++; # Count instances of transcripts in @leftintrontranscriptnames
       }
-      foreach (@rightintrongenenames) {
-	$rightintrongenenames{$_}++;
+      foreach (@rightintrontranscriptnames) {
+	$rightintrontranscriptnames{$_}++;
       }
 
       foreach my $intron (@leftintrons) { # Cancel out introns hit by both right and left breakends
 	if (exists $rightintrons{$intron}) {
-	  my $introngene = $leftintrons{$intron};
-	  $leftintrongenenames{$introngene}--;
-	  delete $leftintrongenenames{$introngene} unless $leftintrongenenames{$introngene}; # If there are no more instances of $introngene in %leftgenenames, delete the entry
-	  $rightintrongenenames{$introngene}--;
-	  delete $rightintrongenenames{$introngene} unless $rightintrongenenames{$introngene}; # If there are no more instances of $introngene in %rightgenenames, delete the entry
+	  my $introntranscript = $leftintrons{$intron};
+	  $leftintrontranscriptnames{$introntranscript}--;
+	  delete $leftintrontranscriptnames{$introntranscript} unless $leftintrontranscriptnames{$introntranscript}; # If there are no more instances of $introntranscript in %lefttranscriptnames, delete the entry
+	  $rightintrontranscriptnames{$introntranscript}--;
+	  delete $rightintrontranscriptnames{$introntranscript} unless $rightintrontranscriptnames{$introntranscript}; # If there are no more instances of $introntranscript in %righttranscriptnames, delete the entry
 	}
       }
 
-      foreach (keys %leftintrongenenames) { # Add remaining genes in %leftintrongenenames to %lefttruncatedgenes
-	$lefttruncatedgenes{$_} = 1;
+      foreach (keys %leftintrontranscriptnames) { # Add remaining transcripts in %leftintrontranscriptnames to %lefttruncatedtranscripts
+	$lefttruncatedtranscripts{$_} = 1;
       }
-      foreach (keys %rightintrongenenames) { # Add remaining genes in %rightintrongenenames to %righttruncatedgenes
-	$righttruncatedgenes{$_} = 1;
+      foreach (keys %rightintrontranscriptnames) { # Add remaining transcripts in %rightintrontranscriptnames to %righttruncatedtranscripts
+	$righttruncatedtranscripts{$_} = 1;
       }
 
-      my @lefttruncatedgenes = keys %lefttruncatedgenes;
-      my @righttruncatedgenes = keys %righttruncatedgenes;
-      $scores{"LTRUNC"} = truncationscore($leftchrom, $pos, \@lefttruncatedgenes, \%genes, $caddfile, $ops, \%operations) if @lefttruncatedgenes;
-      $scores{"RTRUNC"} = truncationscore($rightchrom, $end, \@righttruncatedgenes, \%genes, $caddfile, $ops, \%operations) if @righttruncatedgenes;
+      my @lefttruncatedtranscripts = keys %lefttruncatedtranscripts;
+      my @righttruncatedtranscripts = keys %righttruncatedtranscripts;
+      $scores{"LTRUNC"} = truncationscore($leftchrom, $pos, \@lefttruncatedtranscripts, \%transcripts, $caddfile, $ops, \%operations) if @lefttruncatedtranscripts;
+      $scores{"RTRUNC"} = truncationscore($rightchrom, $end, \@righttruncatedtranscripts, \%transcripts, $caddfile, $ops, \%operations) if @righttruncatedtranscripts;
     }
 
     # This is an ugly loop which transposes %scores so that the keys are operations, not intervals
@@ -612,21 +543,21 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
   }
 }
 
-sub truncationscore { # Calculate truncation score based on the coordinates of a given breakend and the names of the genes it hits
-  my ($chrom, $pos, $introngenesref, $genesref, $caddfile, $ops, $operationsref) = @_;
+sub truncationscore { # Calculate truncation score based on the coordinates of a given breakend and the names of the transcripts it hits
+  my ($chrom, $pos, $introntranscriptsref, $transcriptsref, $caddfile, $ops, $operationsref) = @_;
   my @ops = split (/,/,$ops);
-  my @introngenes = @{$introngenesref};
-  return "" unless @introngenes;
+  my @introntranscripts = @{$introntranscriptsref};
+  return "" unless @introntranscripts;
   my %operations = %{$operationsref};
-  my %genes = %{$genesref};
+  my %transcripts = %{$transcriptsref};
   my %truncationscores;
-  foreach my $gene (@introngenes) {
-    my ($genestart,$genestop,$genestrand) = @{$genes{$gene}->{$chrom}}[0..2];	
+  foreach my $transcript (@introntranscripts) {
+    my ($transcriptstart,$transcriptstop,$transcriptstrand) = @{$transcripts{$transcript}->{$chrom}}[0..2];	
     my $cscoreopres;
-    if ($genestrand eq '+') {
-      $cscoreopres = cscoreop($caddfile, $ops, $chrom, max($genestart,$pos),$genestop, -1); # Start from beginning of gene or breakend, whichever is further right, stop at end of gene
+    if ($transcriptstrand eq '+') {
+      $cscoreopres = cscoreop($caddfile, $ops, $chrom, max($transcriptstart,$pos),$transcriptstop, -1); # Start from beginning of transcript or breakend, whichever is further right, stop at end of transcript
     } else {
-      $cscoreopres = cscoreop($caddfile, $ops, $chrom, $genestart,min($genestop,$pos), -1); # Start from beginning of gene, stop at end of gene or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
+      $cscoreopres = cscoreop($caddfile, $ops, $chrom, $transcriptstart,min($transcriptstop,$pos), -1); # Start from beginning of transcript, stop at end of transcript or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
     }
     foreach my $op (keys %operations) {
       push @{$truncationscores{$op}}, $cscoreopres->[$operations{$op}];
@@ -656,16 +587,13 @@ sub replaceoraddfield {
 }
 
 sub main::HELP_MESSAGE() {
-  print STDERR "usage: ./svscore.pl [-dv] [-o op] [-t topnumber] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] -i vcf
+  print STDERR "usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i vcf
     -i	      Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use \"-i stdin\" if using standard input
     -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
     -o	      Comma-separated list of operations to perform on CADD score intervals (must be some combination of sum, max, mean, meanweighted, top\\d, and top\\dweighted - defaults to top10weighted)
-    -g	      Points to gene BED file (refGene.genes.b37.bed)
-    -e	      Points to exon BED file (refGene.exons.b37.bed)
-    -m	      Column number for gene name in gene BED file (4)
-    -p	      Column number for strand in gene BED file (5)
-    -n	      Column number for gene name in exon BED file (5 for refGene.exons.b37.bed, 4 otherwise)
+    -e	      Points to exon BED file (refGene.exons.bed)
+    -f	      Points to intron BED file (refGene.introns.bed)
     -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
 
     --help    Display this message
