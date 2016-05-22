@@ -252,7 +252,7 @@ eval { # Catch errors
   open(EXONS, "$uncompressedexonfile") || die "Could not open $uncompressedexonfile: $!;;" . join(',',@todelete);
   foreach my $exonline (<EXONS>) { # Parse exon file, recording the chromosome, strand, and first and last bases (in VCF coordinates) of each transcript
     my ($transcriptchrom, $transcriptname, $transcriptstart, $transcriptstop, $transcriptstrand) = (split(/\s+/,$exonline))[0,3,4..6];
-    $transcriptstart++;
+    $transcriptstart++; # $transcriptstart should be the first base (in VCF) that is part of the transcript
     if (defined $transcripts{$transcriptname}->{$transcriptchrom}) { ## Assume strand stays constant
       $transcripts{$transcriptname}->{$transcriptchrom}->[0] = min($transcripts{$transcriptname}->{$transcriptchrom}->[0], $transcriptstart);
       $transcripts{$transcriptname}->{$transcriptchrom}->[1] = max($transcripts{$transcriptname}->{$transcriptchrom}->[1], $transcriptstop);
@@ -292,7 +292,7 @@ eval { # Catch errors
       if ($rightstop - $leftstart > 1000000) {
 	$scores{"SPAN"} = (100) x @ops;
       } else {
-	$scores{"SPAN"} = cscoreop($caddfile, $ops, $leftchrom, $pos, $end, -1);
+	$scores{"SPAN"} = cscoreop($caddfile, $ops, $leftchrom, $pos+1, $end, -1);
       }
     }
 
@@ -543,7 +543,7 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
   }
 }
 
-sub truncationscore { # Calculate truncation score based on the coordinates of a given breakend and the names of the transcripts it hits
+sub truncationscore { # Calculate truncation score based on the BED coordinates of a given breakend and the names of the transcripts it hits
   my ($chrom, $pos, $introntranscriptsref, $transcriptsref, $caddfile, $ops, $operationsref) = @_;
   my @ops = split (/,/,$ops);
   my @introntranscripts = @{$introntranscriptsref};
@@ -555,7 +555,7 @@ sub truncationscore { # Calculate truncation score based on the coordinates of a
     my ($transcriptstart,$transcriptstop,$transcriptstrand) = @{$transcripts{$transcript}->{$chrom}}[0..2];	
     my $cscoreopres;
     if ($transcriptstrand eq '+') {
-      $cscoreopres = cscoreop($caddfile, $ops, $chrom, max($transcriptstart,$pos),$transcriptstop, -1); # Start from beginning of transcript or breakend, whichever is further right, stop at end of transcript
+      $cscoreopres = cscoreop($caddfile, $ops, $chrom, max($transcriptstart,$pos+1),$transcriptstop, -1); # Start from beginning of transcript or breakend, whichever is further right, stop at end of transcript
     } else {
       $cscoreopres = cscoreop($caddfile, $ops, $chrom, $transcriptstart,min($transcriptstop,$pos), -1); # Start from beginning of transcript, stop at end of transcript or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
     }

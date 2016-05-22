@@ -20,8 +20,8 @@ usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i
 After downloading SVScore, there are a few steps to follow before it is ready to use.
   1. Run setup.sh. This will test SVScore to ensure all dependencies are met. setup.sh takes as an argument the path to the user's copy of whole_genome_SNVs.tsv.gz, e.g. `sh setup.sh /path/to/whole_genome_SNVs.tsv.gz`
   2. If planning to use the default (refGene) annotations, simply execute `./generateannotations.pl` to generate the annotation files required by SVScore. If planning to use a custom annotation track, `generateannotations.pl` can be used to generate custom annotation files, or the user can generate them manually.
-    * If using `generateannotations.pl`, the user must supply an annotation track in which each line represents a transcript and contains the following columns: chromosome, transcript start position, transcript stop position, transcript strand, transcript name, exon start positions (comma-delimited), and exon stop positions (comma-delimited). Command line options must be used to specify each column number. To see usage instructions, execute `./generateannotations.pl --help`. `generateannotations.pl` will create two files in the current directory, named based on the prefix to the input file - [prefix].introns.bed and [prefix].exons.bed. These should be specified to SVScore using the -e and -f options.
-    * If generating annotation files for SVScore manually, they must have the following columns, in order:
+    * If generating custom annotation files using `generateannotations.pl`, the user must supply an annotation track in which each line represents a transcript and contains the following columns: chromosome, transcript start position, transcript stop position, transcript strand, transcript name, exon start positions (comma-delimited), and exon stop positions (comma-delimited). Command line options must be used to specify each column number. To see usage instructions, execute `./generateannotations.pl --help`. `generateannotations.pl` will create two files in the current directory, named based on the prefix to the input file - [prefix].introns.bed and [prefix].exons.bed. These should be specified to SVScore using the -e and -f options.
+    * If generating custom annotation files for SVScore manually, they must have the following columns, in order:
       * Exon file:
         * 1 - Exon chromosome 
         * 2 - Exon start position
@@ -79,13 +79,14 @@ For weighted operations, if PRPOS is not found in the header, SVScore will calcu
 For SPAN/LTRUNC/RTRUNC, these operations are applied to the scores of the bases in the interval. For LEFT/RIGHT intervals, the operations are applied to scores assigned to each possible breakpoint, which is calculated by taking the average of the 2 flanking bases (one on either side of the possible breakpoint)
 
 ## Dependencies
-* A Linux-like system with a Bash-like shell, with sh, cd, sort, cat, rm, rmdir, diff, echo, chmod, grep, and awk
+* A Linux-like system with a Bash-like shell, with sh, cd, sort, cat, zcat, rm, rmdir, diff, echo, chmod, grep, and awk
 * Perl v5.10.1 or later
 * [vcfanno](https://www.github.com/brentp/vcfanno) v0.0.10
 * [svtools v0.2.0](https://github.com/hall-lab/svtools/releases/tag/v0.2.0)
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from v1.3 of [CADD](http://cadd.gs.washington.edu/download) 
 * [tabix/bgzip](https://github.com/samtools/htslib)
 * (optional) An custom hg19/GRCh37-based gene/exon track. If one is not supplied, SVScore will download refGene annotations in `generateannotations.pl`. For more information, see [First Time Setup](#first-time-setup)
+
 The following must be in your path to use SVScore: svtools, vcfanno, tabix
   
 ## Notes
