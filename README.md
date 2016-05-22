@@ -31,11 +31,11 @@ After downloading SVScore, there are a few steps to follow before it is ready to
         * 6 - Transcript stop position
         * 7 - Transcript strand
       * Intron file:
-	  * 1 - Intron chromosome
-	  * 2 - Intron start position
-	  * 3 - Intron stop position
-	  * 4 - Transcript name
-	  * 5 - Intron number (arbitrary, but must be unique. Line number works well)
+            * 1 - Intron chromosome
+            * 2 - Intron start position
+            * 3 - Intron stop position
+            * 4 - Transcript name
+            * 5 - Intron number (arbitrary, but must be unique. Line number works well)
   3. SVScore assumes the user's version of perl is installed in the default directory (`/usr/bin/perl`). If this is not the case, the first line of all .pl files should be changed to reflect the correct perl installation directory.
 
 ## Output
