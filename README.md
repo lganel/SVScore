@@ -1,5 +1,5 @@
 # SVScore
-SVScore is a VCF annotation tool which scores structural variants by predicted pathogenicity based on SNP-based CADD scores. For each variant, SVScore first defines important genomic intervals based on the variant type, breakend confidence intervals, and overlapping exon/intron annotations. It then applies an operation to each interval to aggregate the CADD scores in that interval into an interval score. A score for a given operation defined as the maximum of all interval scores calculated using that operation. SVScore is based on GRCh37/hg19.
+SVScore is a VCF annotation tool which scores structural variants by predicted pathogenicity based on SNP-based CADD scores. For each variant, SVScore first defines important genomic intervals based on the variant type, breakend confidence intervals, and overlapping exon/intron annotations. It then applies an operation to each interval to aggregate the CADD scores in that interval into an interval score. A score for a given operation defined as the maximum of all interval scores calculated using that operation. SVScore is based on hg19/GRCh37.
 
 ## Usage
 ```
@@ -79,17 +79,14 @@ For weighted operations, if PRPOS is not found in the header, SVScore will calcu
 For SPAN/LTRUNC/RTRUNC, these operations are applied to the scores of the bases in the interval. For LEFT/RIGHT intervals, the operations are applied to scores assigned to each possible breakpoint, which is calculated by taking the average of the 2 flanking bases (one on either side of the possible breakpoint)
 
 ## Dependencies
-* A Linux-like system with a Bash-like shell
+* A Linux-like system with a Bash-like shell, with sh, cd, sort, cat, rm, rmdir, diff, echo, chmod, grep, and awk
 * Perl v5.10.1 or later
 * [vcfanno](https://www.github.com/brentp/vcfanno) v0.0.10
-* [bedtools](https://www.github.com/arq5x/bedtools2)
 * [svtools v0.2.0](https://github.com/hall-lab/svtools/releases/tag/v0.2.0)
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from v1.3 of [CADD](http://cadd.gs.washington.edu/download) 
 * [tabix/bgzip](https://github.com/samtools/htslib)
-* Your favorite hg19/GRCh37-based, tab-delimited, exon- and gene-describing BED files (optional). If not supplied, svscore.pl will automatically download RefSeq annotations (functionality courtesy of Colby Chiang).
-  * SVScore expects custom gene annotation files to contain gene symbol/name in column 4 and strand information in column 5, though these can be changed with -m and -p
-  * SVScore expects custom exon annotation files to contain gene symbol/name in column 4, though this can be changed with -n
-The following must be in your path to use SVScore: svtools, vcfanno, bedtools, tabix
+* (optional) An custom hg19/GRCh37-based gene/exon track. If one is not supplied, SVScore will download refGene annotations in `generateannotations.pl`. For more information, see [First Time Setup](#first-time-setup)
+The following must be in your path to use SVScore: svtools, vcfanno, tabix
   
 ## Notes
 If an input VCF file already has SVSCORE annotations in the INFO column, new annotations will overwrite old ones.
