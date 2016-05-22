@@ -23,7 +23,7 @@ After downloading SVScore, there are a few steps to follow before it is ready to
     * If using `generateannotations.pl`, the user must supply an annotation track in which each line represents a transcript and contains the following columns: chromosome, transcript start position, transcript stop position, transcript strand, transcript name, exon start positions (comma-delimited), and exon stop positions (comma-delimited). Command line options must be used to specify each column number. To see usage instructions, execute `./generateannotations.pl --help`. `generateannotations.pl` will create two files in the current directory, named based on the prefix to the input file - [prefix].introns.bed and [prefix].exons.bed. These should be specified to SVScore using the -e and -f options.
     * If generating annotation files for SVScore manually, they must have the following columns, in order:
       * Exon file:
-      <ol>
+      <ol type="1">
           <li>Exon chromosome </li>
           <li>Exon start position</li>
           <li>Exon stop position</li>
@@ -33,7 +33,7 @@ After downloading SVScore, there are a few steps to follow before it is ready to
           <li>Transcript strand</li>
       </ol>
       * Intron file:
-      <ol>
+      <ol type="1">
           <li>Intron chromosome</li>
           <li>Intron start position</li>
           <li>Intron stop position</li>
