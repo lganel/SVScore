@@ -1,5 +1,3 @@
-#!/bin/bash
-
 if [ -z "$1" ]; then
   echo "Please provide the path to whole_genome_SNVs.tsv.gz as an argument"
   exit 1
@@ -22,7 +20,7 @@ echo -e "\n\n********NA12878********"
 echo "Generating annotation files"
 ../generateannotations.pl
 cd ..
-./svscore.pl -o max,sum,top5,top10,mean -dvc tests/$1 -i tests/NA12878.sv.vcf | grep -v "^#" > tests/NA12878.sv.svscore.test.vcf
+./svscore.pl -o max,sum,top5,top10,mean -dvc $1 -i tests/NA12878.sv.vcf | grep -v "^#" > tests/NA12878.sv.svscore.test.vcf
 echo -e "\n\n"
 cd tests
 

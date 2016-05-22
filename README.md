@@ -1,26 +1,45 @@
 # SVScore
-SVScore is a VCF annotation tool which scores structural variants by predicted pathogenicity based on SNP-based CADD scores. For each variant, SVScore first defines important genomic intervals based on the variant type, breakend confidence intervals, and nearby gene/exon annotations. It then applies an operation to each interval to aggregate the CADD scores in that interval into an interval score. A score for a given operation defined as the maximum of all interval scores calculated using that operation.
+SVScore is a VCF annotation tool which scores structural variants by predicted pathogenicity based on SNP-based CADD scores. For each variant, SVScore first defines important genomic intervals based on the variant type, breakend confidence intervals, and overlapping exon/intron annotations. It then applies an operation to each interval to aggregate the CADD scores in that interval into an interval score. A score for a given operation defined as the maximum of all interval scores calculated using that operation. SVScore is based on GRCh37/hg19.
 
 ## Usage
 ```
-usage: ./svscore.pl [-dv] [-o op] [-t topnumber] [-g genefile] [-m geneannotationcolumn] [-p genestrandcolumn] [-e exonfile] [-c caddfile] -i vcf
-    -i        Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use "-i stdin" if using standard input
+usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i vcf
+    -i        Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use \"-i stdin\" if using standard input
     -d        Debug mode, keeps intermediate and supporting files, displays progress
     -v        Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
     -o        Comma-separated list of operations to perform on CADD score intervals (must be some combination of sum, max, mean, meanweighted, top\\d, and top\\dweighted - defaults to top10weighted)
-    -g        Points to gene BED file (refGene.genes.b37.bed)
-    -e        Points to exon BED file (refGene.exons.b37.bed)
-    -m        Column number for gene name in gene BED file (4)
-    -p        Column number for strand in gene BED file (5)
-    -n        Column number for gene name in exon BED file (5 for refGene.exons.b37.bed, 4 otherwise)
+    -e        Points to exon BED file (refGene.exons.bed)
+    -f        Points to intron BED file (refGene.introns.bed)
     -c        Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
 
     --help    Display this message
     --version Display version
 ```
 
+## First Time Setup
+After downloading SVScore, there are a few steps to follow before it is ready to use.
+  1. Run setup.sh. This will test SVScore to ensure all dependencies are met. setup.sh takes as an argument the path to the user's copy of whole_genome_SNVs.tsv.gz, e.g. `sh setup.sh /path/to/whole_genome_SNVs.tsv.gz`
+  2. If planning to use the default (refGene) annotations, simply execute `./generateannotations.pl` to generate the annotation files required by SVScore. If planning to use a custom annotation track, `generateannotations.pl` can be used to generate custom annotation files, or the user can generate them manually.
+    * If using `generateannotations.pl`, the user must supply an annotation track in which each line represents a transcript and contains the following columns: chromosome, transcript start position, transcript stop position, transcript strand, transcript name, exon start positions (comma-delimited), and exon stop positions (comma-delimited). Command line options must be used to specify each column number. To see usage instructions, execute `./generateannotations.pl --help`. `generateannotations.pl` will create two files in the current directory, named based on the prefix to the input file - [prefix].introns.bed and [prefix].exons.bed. These should be specified to SVScore using the -e and -f options.
+    * If generating annotation files for SVScore manually, they must have the following columns, in order:
+      * Exon file:
+	1. Exon chromosome
+	2. Exon start position
+	3. Exon stop position
+	4. Transcript name
+	5. Transcript start position
+	6. Transcript stop position
+	7. Transcript strand
+      * Intron file:
+	1. Intron chromosome
+	2. Intron start position
+	3. Intron stop position
+	4. Transcript name
+	5. Intron number (arbitrary, but must be unique. Line number works well)
+  3. SVScore assumes the user's version of perl is installed in the default directory (`/usr/bin/perl`). If this is not the case, the first line of all .pl files should be changed to reflect the correct perl installation directory.
+
 ## Output
-SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE\[op\](_[interval]), where [op] represents the operation used to calculate that score (see [Operations](#operations)) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/DEL/INS variants which seem to truncate a gene on the left side, the interval is from the most likely base of the left breakend to the end of the gene), and right truncation score. Scores with no interval listed (such as SVSCOREMAX=) are the maximum over all intervals for that operation.
+SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE\[op\](_[interval]), where [op] represents the operation used to calculate that score (see [Operations](#operations)) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/DEL/INS variants which seem to truncate a transcript on the left side, the interval is from the most likely base of the left breakend to the end of the transcript), and right truncation score. Scores with no interval listed (such as SVSCOREMAX=) are the maximum over all intervals for that operation.
 
 ## Intervals
 For each variant, scores are calculated over a number of intervals which varies by SV type. The intervals chosen for each SV type, are described in [Supported SV types and intervals](#supported-sv-types-and-intervals)
@@ -30,18 +49,18 @@ For each variant, scores are calculated over a number of intervals which varies 
 * LTRUNC - left truncation
 * RTRUNC - right truncation
 
-Truncation intervals are defined for each gene which seems to be truncated by a variant. The interval extends from the most likely base of the furthest upstream breakend (LEFT for genes on the + strand, RIGHT for those on the - strand) to the end of the gene. Each truncation score is the maximum over all genes truncated by a variant.
+Truncation intervals are defined for each transcript which seems to be truncated by a variant. The interval extends from the most likely base of the furthest upstream breakend (LEFT for transcripts on the + strand, RIGHT for those on the - strand) to the end of the transcript. Each truncation score is the maximum over all transcripts truncated by a variant.
 
 ## Supported SV types and intervals
-|      | LEFT | RIGHT | SPAN | LTRUNC | RTRUNC | Notes
-|:---:|:---:|:---:|:---:|:---:|:---:|:---
-|DEL|X|X|X|X|X|
-|DUP|X|X|X|||
-|INV|X|X||X|X|
-|BND|X|X||||
-|INS|X|X||X|X|
-|CNV|X|X|X|||
-|MEI|X|X||||
+|      | LEFT | RIGHT | SPAN | LTRUNC | RTRUNC
+|:---:|:---:|:---:|:---:|:---:|:---:
+|DEL|X|X|X|X|X
+|DUP|X|X|X||
+|INV|X|X||X|X
+|BND|X|X|||
+|INS|X|X||X|X
+|CNV|X|X|X||
+|MEI|X|X|||
 To function correctly, SVScore requires that POS=END and CIPOS=CIEND for INS variants
 
 LTRUNC and RTRUNC scores are only calculated when a breakend overlaps an exon or a breakend overlaps an intron which is not also touched by the opposite breakend.

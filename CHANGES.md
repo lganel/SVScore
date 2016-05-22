@@ -6,6 +6,7 @@
  * Added stress test
  * All scores with weighted operations for variants with no PRPOS are now -1
  * Changed usage (-i specifies input file, -o now takes comma-delimited list of operations, removed -s)
+ * Added script which downloads/generates annotation files from single annotation track
  * Added test for PRPOS in header if a weighted operation is specified - defaults to unweighted if not found
  * Removed -w, added TOP[n]WEIGHTED and MEANWEIGHTED as operations
  * Default operation is now TOP10WEIGHTED
@@ -16,6 +17,7 @@
  * Calculate truncation scores for DELs
  * Treat MEIs like BNDs
  * Calculate truncation scores from most likely bases
+ * Added setup script
  * Bug fixes/code improvements
  * Error handling
 
