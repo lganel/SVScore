@@ -23,19 +23,23 @@ After downloading SVScore, there are a few steps to follow before it is ready to
     * If using `generateannotations.pl`, the user must supply an annotation track in which each line represents a transcript and contains the following columns: chromosome, transcript start position, transcript stop position, transcript strand, transcript name, exon start positions (comma-delimited), and exon stop positions (comma-delimited). Command line options must be used to specify each column number. To see usage instructions, execute `./generateannotations.pl --help`. `generateannotations.pl` will create two files in the current directory, named based on the prefix to the input file - [prefix].introns.bed and [prefix].exons.bed. These should be specified to SVScore using the -e and -f options.
     * If generating annotation files for SVScore manually, they must have the following columns, in order:
       * Exon file:
-          1. Exon chromosome
-          2. Exon start position
-          3. Exon stop position
-          4. Transcript name
-          5. Transcript start position
-          6. Transcript stop position
-          7. Transcript strand
+      <ol>
+          <li>Exon chromosome </li>
+          <li>Exon start position</li>
+          <li>Exon stop position</li>
+          <li>Transcript name</li>
+          <li>Transcript start position</li>
+          <li>Transcript stop position</li>
+          <li>Transcript strand</li>
+      </ol>
       * Intron file:
-          1. Intron chromosome
-          2. Intron start position
-          3. Intron stop position
-          4. Transcript name
-          5. Intron number (arbitrary, but must be unique. Line number works well)
+      <ol>
+          <li>Intron chromosome</li>
+          <li>Intron start position</li>
+          <li>Intron stop position</li>
+          <li>Transcript name</li>
+          <li>Intron number (arbitrary, but must be unique. Line number works well)</li>
+      <ol>
   3. SVScore assumes the user's version of perl is installed in the default directory (`/usr/bin/perl`). If this is not the case, the first line of all .pl files should be changed to reflect the correct perl installation directory.
 
 ## Output
