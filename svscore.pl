@@ -290,7 +290,8 @@ eval { # Catch errors
     
     if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
       if ($rightstop - $leftstart > 1000000) {
-	$scores{"SPAN"} = (100) x @ops;
+	my @hundred = (100) x @ops;
+	$scores{"SPAN"} = \@hundred;
       } else {
 	$scores{"SPAN"} = cscoreop($caddfile, $ops, $leftchrom, $pos+1, $end, -1);
       }
