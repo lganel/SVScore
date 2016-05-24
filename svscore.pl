@@ -285,9 +285,7 @@ eval { # Catch errors
 
     my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
-    print STDERR "LEFT:\n"; ## DEBUG
     $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
-    print STDERR "RIGHT:\n"; ## DEBUG
     $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
     
     if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
@@ -475,10 +473,8 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   }
 
   if ($weight) { # Rescale probability distribution to add up to 1 (to account for excluded bases with no C scores or faulty PRPOS annotation) and weight @scores
-    print STDERR "  FIRST:\n"; ## DEBUG
     my $normref = normalize(\@probdist);
     @probdist = @{$normref};
-    print STDERR "  AFTERFIRST:\n@probdist\n"; ## DEBUG
     @weightedbptscores = pairwise {$a * $b} @scores, @probdist;
   }
 
@@ -536,7 +532,6 @@ sub normalize { # Given an array reference, normalize the array so it sums to 1 
       $ls[$_] = $ls[$_] / $sum;
     }
   }
-  print STDERR "@ls\n"; ## DEBUG
   return \@ls;
 }
 
