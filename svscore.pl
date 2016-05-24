@@ -253,12 +253,12 @@ eval { # Catch errors
   foreach my $exonline (<EXONS>) { # Parse exon file, recording the chromosome, strand, and first and last bases (in VCF coordinates) of each transcript
     my ($transcriptchrom, $transcriptname, $transcriptstart, $transcriptstop, $transcriptstrand) = (split(/\s+/,$exonline))[0,3,4..6];
     $transcriptstart++; # $transcriptstart should be the first base (in VCF) that is part of the transcript
-    if (defined $transcripts{$transcriptname}->{$transcriptchrom}) { ## Assume strand stays constant
-      $transcripts{$transcriptname}->{$transcriptchrom}->[0] = min($transcripts{$transcriptname}->{$transcriptchrom}->[0], $transcriptstart);
-      $transcripts{$transcriptname}->{$transcriptchrom}->[1] = max($transcripts{$transcriptname}->{$transcriptchrom}->[1], $transcriptstop);
-    } else {
-      $transcripts{$transcriptname}->{$transcriptchrom} = [$transcriptstart, $transcriptstop, $transcriptstrand];
-    }
+    #if (defined $transcripts{$transcriptname}->{$transcriptchrom}) { ## Assume strand stays constant
+    #  $transcripts{$transcriptname}->{$transcriptchrom}->[0] = min($transcripts{$transcriptname}->{$transcriptchrom}->[0], $transcriptstart);
+    #  $transcripts{$transcriptname}->{$transcriptchrom}->[1] = max($transcripts{$transcriptname}->{$transcriptchrom}->[1], $transcriptstop);
+    #} else {
+    $transcripts{$transcriptname}->{$transcriptchrom} = [$transcriptstart, $transcriptstop, $transcriptstrand];
+    #}
   }
   close EXONS;
 
@@ -285,7 +285,9 @@ eval { # Catch errors
 
     my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
+    print STDERR "LEFT:\n"; ## DEBUG
     $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
+    print STDERR "RIGHT:\n"; ## DEBUG
     $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
     
     if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
@@ -473,8 +475,10 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
   }
 
   if ($weight) { # Rescale probability distribution to add up to 1 (to account for excluded bases with no C scores or faulty PRPOS annotation) and weight @scores
+    print STDERR "  FIRST:\n"; ## DEBUG
     my $normref = normalize(\@probdist);
     @probdist = @{$normref};
+    print STDERR "  AFTERFIRST:\n@probdist\n"; ## DEBUG
     @weightedbptscores = pairwise {$a * $b} @scores, @probdist;
   }
 
@@ -521,12 +525,18 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
 
 sub normalize { # Given an array reference, normalize the array so it sums to 1 and return a reference to the array
   my @ls = @{$_[0]};
+  return [1] if @ls == 1;
   my $sum = sum(@ls);
+  if ($sum == 0) { # This can happen if the elements in @ls are below perl's precision
+    @ls = (1) x @ls; # Return a uniform probability distribution
+    $sum = @ls;
+  }
   unless ($sum == 1) {
     foreach (0..$#ls) {
       $ls[$_] = $ls[$_] / $sum;
     }
   }
+  print STDERR "@ls\n"; ## DEBUG
   return \@ls;
 }
 

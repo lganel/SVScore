@@ -19,9 +19,9 @@ usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i
 ## First Time Setup
 After downloading SVScore, there are a few steps to follow before it is ready to use.
   1. Run setup.sh. This will test SVScore to ensure all dependencies are met. setup.sh takes as an argument the path to the user's copy of whole_genome_SNVs.tsv.gz, e.g. `sh setup.sh /path/to/whole_genome_SNVs.tsv.gz`
-  2. If planning to use the default (refGene) annotations, simply execute `./generateannotations.pl` to generate the annotation files required by SVScore. If planning to use a custom annotation track, `generateannotations.pl` can be used to generate custom annotation files, or the user can generate them manually.
+  2. If planning to use the default (refGene) annotations, simply execute `./generateannotations.pl` to generate the annotation files required by SVScore. If planning to use a custom annotation track, `generateannotations.pl` can be used to generate custom annotation files, or the user can generate them manually (though this is not recommended).
     * If generating custom annotation files using `generateannotations.pl`, the user must supply an annotation track in which each line represents a transcript and contains the following columns: chromosome, transcript start position, transcript stop position, transcript strand, transcript name, exon start positions (comma-delimited), and exon stop positions (comma-delimited). Command line options must be used to specify each column number. To see usage instructions, execute `./generateannotations.pl --help`. `generateannotations.pl` will create two files in the current directory, named based on the prefix to the input file - [prefix].introns.bed and [prefix].exons.bed. These should be specified to SVScore using the -e and -f options.
-    * If generating custom annotation files for SVScore manually, they must have the following columns, in order:
+    * **If generating custom annotation files for SVScore manually, users should ensure that each transcript has a unique name.** Annotation files should contain the following columns, in order:
       * Exon file:
         * 1 - Exon chromosome 
         * 2 - Exon start position

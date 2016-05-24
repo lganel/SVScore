@@ -30,10 +30,20 @@ open(IN, $inputfile) || die "Download/opening of refGene file failed";
 open(INTRON,"> $prefix.introns.bed") || die "Could not open introns.$prefix.bed for writing";
 open(EXON,"> $prefix.exons.bed") || die "Could not open exons.$prefix.bed for writing";
 
+my %names = ();
 my $intronnumber = 1;
 while(my $line = <IN>) {
   next if $line =~ /^#/;
   my ($chrom,$start,$stop,$transcript,$exonstart,$exonstop,$strand) = (split(/\s+/,$line))[$chromcolumn-1,$startcolumn-1,$stopcolumn-1,$transcriptcolumn-1,$exonstartcolumn-1,$exonstopcolumn-1,$strandcolumn-1];
+  if (exists $names{$transcript}) {
+    my $i = 0;
+    my $original = $transcript;
+    do {
+      $i++;
+      $transcript = "$original.$i";
+    } while (exists $names{$transcript});
+  }
+  $names{$transcript} = undef;
   $chrom =~ s/^chr//;
   my @exonstarts = split(/,/,$exonstart);
   my @exonstops = split(/,/,$exonstop);
@@ -64,8 +74,8 @@ close EXON;
 close INTRON;
 close IN;
 
-!system("sort -k1,1V -k2,2n -k3,3n $prefix.introns.bed > $prefix.introns.sort.bed; mv -f $prefix.introns.sort.bed $prefix.introns.bed") || die "Intron file sorting failed";
-!system("sort -k1,1V -k2,2n -k3,3n $prefix.exons.bed > $prefix.exons.sort.bed; mv -f $prefix.exons.sort.bed $prefix.exons.bed") || die "Exon file sorting failed";
+!system("sort -k1,1V -k2,2n -k3,3n $prefix.introns.bed | uniq > $prefix.introns.sort.bed; mv -f $prefix.introns.sort.bed $prefix.introns.bed") || die "Intron file sorting failed";
+!system("sort -k1,1V -k2,2n -k3,3n $prefix.exons.bed | uniq > $prefix.exons.sort.bed; mv -f $prefix.exons.sort.bed $prefix.exons.bed") || die "Exon file sorting failed";
 
 sub main::HELP_MESSAGE(){
   print STDERR "usage: ./generateannotations.pl [-c chromcolumn] [-a startcolumn] [-b stopcolumn] [-t transcriptcolumn] [-e exonstartcolumn] [-f exonstopcolumn] [-s strandcolumn] [file]
