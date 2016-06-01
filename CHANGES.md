@@ -1,4 +1,4 @@
-## 0.5 (Under development)
+## 0.5 (05/24/16)
  * Calculate breakend scores based on scores at possible breakends, not bases
  * Revamped conditions for calculating truncation scores
  * Rescale probability distributions based on which possible breakpoints have available scores

@@ -18,7 +18,7 @@ $main::VERSION = '0.5';
 eval { # Catch errors
   my %possibleoperations = ("MAX", 1, "SUM", 1, "TOP", 1, "MEAN", 1, "MEANWEIGHTED", 1, "TOPWEIGHTED", 1); # Hash of supported operations
   my %types = map {$_ => 1} ("DEL", "DUP", "INV", "BND", "CNV", "MEI", "INS"); # Hash of supported svtypes
-  my %truncationtypes = map {$_ => 1} ("INV","INS","DEL"); # All svtypes for which truncation scores are calculated
+  my %truncationtypes = map {$_ => 1} ("INV","INS","DEL","MEI"); # All svtypes for which truncation scores are calculated
   my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
   my %options = ();
@@ -320,15 +320,15 @@ eval { # Catch errors
       # %leftintrontranscriptnames and %rightintrontranscriptnames are {transcript => # of instances in $lefttranscriptnames or $righttranscriptnames}
       # %leftintrons and %rightintrons are {number of intron hit by the left or right breakend => name of transcript}
       
-      my %lefttruncatedtranscripts = map {$_ => 1} (split(/\|/,$leftexontranscriptnames));
-      my %righttruncatedtranscripts = map {$_ => 1} (split(/\|/,$rightexontranscriptnames));
+      my %lefttruncatedtranscripts = map {$_ => 1} (split(/,/,$leftexontranscriptnames));
+      my %righttruncatedtranscripts = map {$_ => 1} (split(/,/,$rightexontranscriptnames));
 
       my (%leftintrontranscriptnames,%rightintrontranscriptnames);
-      my @leftintrons = split(/\|/,$leftintrons);
-      my @leftintrontranscriptnames = split(/\|/,$leftintrontranscriptnames);
+      my @leftintrons = split(/,/,$leftintrons);
+      my @leftintrontranscriptnames = split(/,/,$leftintrontranscriptnames);
       my %leftintrons = map {$leftintrons[$_] => $leftintrontranscriptnames[$_]} (0..$#leftintrons); # @leftintrons and @leftintrontranscripts should have the same number of elements if vcfanno is working as it should
-      my @rightintrons = split(/\|/,$rightintrons);
-      my @rightintrontranscriptnames = split(/\|/,$rightintrontranscriptnames);
+      my @rightintrons = split(/,/,$rightintrons);
+      my @rightintrontranscriptnames = split(/,/,$rightintrontranscriptnames);
       my %rightintrons = map {$rightintrons[$_] => $rightintrontranscriptnames[$_]} (0..$#rightintrons);
 
       foreach (@leftintrontranscriptnames) {
