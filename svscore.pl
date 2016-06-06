@@ -22,7 +22,7 @@ eval { # Catch errors
   my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
   my %options = ();
-  getopts('dvi:c:f:e:o:',\%options);
+  getopts('dvi:c:f:e:o:h:',\%options);
 
 # Parse command line options, set variables, check input parameters
   my $debug = defined $options{'d'};
@@ -38,6 +38,9 @@ eval { # Catch errors
   die "Could not find exon file $exonfile" unless -s $exonfile;
   $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
   my $ops = (defined $options{'o'} ? $options{'o'} : 'TOP10WEIGHTED');
+  my $homedir = (defined $options{'h'} ? $options{'h'} : '.');
+  die "$homedir does not exist" unless -d $homedir;
+  $homedir =~ s/\/$//; # Trim off trailing slash if it exists
 
   my @ops = uniq(split(/,/,$ops));
   my %operations = (); # Hash of chosen operations
@@ -156,7 +159,7 @@ eval { # Catch errors
     }
   }
 
-  my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; vcfanno -ends conf.toml $sortedfile | perl reorderheader.pl stdin $inputfile | svtools vcftobedpe > $preprocessedfile"; # Sort, annotate, reorder header, convert to BEDPE
+  my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; vcfanno -ends conf.toml $sortedfile | perl $homedir/reorderheader.pl stdin $inputfile | svtools vcftobedpe > $preprocessedfile"; # Sort, annotate, reorder header, convert to BEDPE
   push @todelete, $preprocessedfile, $sortedfile unless $debug;
   print STDERR "Preprocessing command:\n$preprocess\n" if $debug;
   die "Preprocessing failed;;" . join(',',@todelete) if (system($preprocess) || -z $preprocessedfile);
@@ -593,7 +596,7 @@ sub replaceoraddfield {
 }
 
 sub main::HELP_MESSAGE() {
-  print STDERR "usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i vcf
+  print STDERR "usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] [-h SVScoredir] -i vcf
     -i	      Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use \"-i stdin\" if using standard input
     -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
@@ -601,6 +604,7 @@ sub main::HELP_MESSAGE() {
     -e	      Points to exon BED file (refGene.exons.bed)
     -f	      Points to intron BED file (refGene.introns.bed)
     -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
+    -h	      Points to directory in which SVScore is installed (defaults to current directory)
 
     --help    Display this message
     --version Display version\n"
