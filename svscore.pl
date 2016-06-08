@@ -310,12 +310,12 @@ eval { # Catch errors
 	($leftintrons,$rightintrons) = getfields($info_a,"left_Intron","right_Intron");
 	($leftintrontranscriptnames,$rightintrontranscriptnames) = getfields($info_a,"left_IntronTranscript","right_IntronTranscript");
       } else { # Multiline variant in VCF (possibly only one line of variant present)
-	$leftexontranscriptnames = getfields($info_a,"ExonTranscript");
-	$leftintrontranscriptnames = getfields($info_a,"IntronTranscript");
-	$leftintrons = getfields($info_a,"Intron");
-	$rightintrons = getfields($info_b,"Intron");
-	$rightexontranscriptnames = getfields($info_b,"ExonTranscript");
-	$rightintrontranscriptnames = getfields($info_b,"IntronTranscript");
+	$leftexontranscriptnames = getfields($info_a,"left_ExonTranscript");
+	$leftintrontranscriptnames = getfields($info_a,"left_IntronTranscript");
+	$leftintrons = getfields($info_a,"left_Intron");
+	$rightintrons = getfields($info_b,"left_Intron");
+	$rightexontranscriptnames = getfields($info_b,"left_ExonTranscript");
+	$rightintrontranscriptnames = getfields($info_b,"left_IntronTranscript");
       }
 
       # We want to make sure we don't consider any variant which is contained within an intron. To do this, we want to cancel out any introns present in both $leftintrons and $rightintrons. However, because a breakend's confidence interval may extend into multiple introns, we can't just exclude any transcript with an intron in both lists, or we would miss some truly transcript-truncating variants. So, we start by considering truncated the transcripts whose exons are affected ($leftexontranscriptnames and $rightexontranscriptnames). We then count the number of instances of each transcript in $leftintrontranscriptnames and $rightintrontranscriptnames. Next, we reduce the number of instances of each transcript by 1 for each of its introns which occurs in both $leftintrons and $rightintrons, as this means this variant is confined to that intron, so that intron does not provide evidence of a truncation. Any transcripts left with at least one instance in %leftintrontranscriptnames are then considered truncated, and are added back to %lefttruncatedtranscripts and %righttruncatedtranscripts. Transcripts contained within the span of a DEL are not considered truncating because they are already captured by the SPAN score
