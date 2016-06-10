@@ -5,17 +5,15 @@ fi
 
 echo -e "********Testing SVScore. Some warnings beginning with \"Warning: missing secondary multiline variant at ID:\" are normal********\n\n"
 
-## Strip header from truth set
-grep -v "^#" NA12878.sv.svscore.vcf > NA12878.sv.svscore.noheader.vcf
+## Strip header from truth set (and strip vcfanno annotations from NA12878)
+grep -v "^#" NA12878.sv.svscore.vcf | perl -ne 's/(left_|right_)?Intron[^;]*;//g; s/(left_|right_)?ExonTranscript=[^;]*;//g; print' >  NA12878.sv.svscore.noheader.vcf
 grep -v "^#" stresstest.svscore.vcf > stresstest.svscore.noheader.vcf
 
 # Perform stress test
 echo "********Stress Test********"
 echo "Generating annotation files"
 ../generateannotations.pl -c 1 -a 2 -b 3 -t 4 -s 5 -e 6 -f 7 dummyannotations.bed
-cd ..
-./svscore.pl -f tests/dummyannotations.introns.bed -e tests/dummyannotations.exons.bed -o max,sum,top2,top2weighted,top3weighted,top4weighted,mean,meanweighted -dvc tests/dummyCADD.tsv.gz -i tests/stresstest.vcf | grep -v "^#" > tests/stresstest.svscore.test.vcf
-cd tests
+../svscore.pl -f dummyannotations.introns.bed -e dummyannotations.exons.bed -h .. -o max,sum,top2,top2weighted,top3weighted,top4weighted,mean,meanweighted -dvc dummyCADD.tsv.gz -i stresstest.vcf | grep -v "^#" > stresstest.svscore.test.vcf
 echo -e "\n\n"
 
 diff stresstest.svscore.test.vcf stresstest.svscore.noheader.vcf > stresstest.diff
@@ -39,9 +37,7 @@ fi
 echo -e "********NA12878********"
 echo "Generating annotation files"
 ../generateannotations.pl
-cd ..
-./svscore.pl -o max,sum,top5,top10,mean -dvc $1 -i tests/NA12878.sv.vcf | grep -v "^#" > tests/NA12878.sv.svscore.test.vcf
-cd tests
+../svscore.pl -o max,sum,top5,top10,mean -e refGene.exons.bed -f refGene.introns.bed -h .. -dvc ../$1 -i NA12878.sv.vcf | grep -v "^#" | perl -ne 's/(left_|right_)?Intron[^;]*;//g; s/(left_|right_)?ExonTranscript=[^;]*;//g; print' > NA12878.sv.svscore.test.vcf
 echo -e "\n\n"
 
 diff NA12878.sv.svscore.test.vcf NA12878.sv.svscore.noheader.vcf > NA12878.diff
@@ -61,5 +57,5 @@ else
   fi
 fi
 
-rm -rf ../svscoretmp/
-rm -f NA12878.sv.svscore.noheader.vcf NA12878.sv.svscore.test.vcf NA12878.diff stresstest.svscore.noheader.vcf stresstest.svscore.test.vcf stresstest.diff dummyannotations.*.bed* refGene*
+rm -rf /svscoretmp/
+rm -f NA12878.sv.svscore.noheader.vcf NA12878.sv.svscore.test.vcf NA12878.diff stresstest.svscore.noheader.vcf stresstest.svscore.test.vcf stresstest.diff dummyannotations.*.bed* refGene* conf.toml
