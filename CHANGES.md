@@ -1,3 +1,10 @@
+## 0.5.1 (06/20/16)
+ * Compatibility with vcfanno v0.0.11 (which provides relevant bug fixes)
+ * Calculate truncation scores for MEIs
+ * Support running svscore from outside installation directory with -h
+ * Use correct vcfanno annotation field for BNDs
+ * Testing now excludes vcfanno annotations to account for future vcfanno changes
+
 ## 0.5 (05/24/16)
  * Calculate breakend scores based on scores at possible breakends, not bases
  * Revamped conditions for calculating truncation scores
