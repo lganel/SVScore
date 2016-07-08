@@ -84,7 +84,7 @@ For weighted operations, if PRPOS is not found in the header, SVScore will calcu
 For SPAN/LTRUNC/RTRUNC, these operations are applied to the scores of the bases in the interval. For LEFT/RIGHT intervals, the operations are applied to scores assigned to each possible breakpoint, which is calculated by taking the average of the 2 flanking bases (one on either side of the possible breakpoint)
 
 ## Dependencies
-* A Linux-like system with a Bash-like shell, with sh, cd, sort, cat, zcat, rm, rmdir, diff, echo, chmod, grep, and awk
+* A Linux-like system with a Bash-like shell, with sh, cd, sort (**With version sort, i.e. a -V option**), cat, zcat, rm, rmdir, diff, echo, chmod, grep, and awk
 * Perl v5.10.1 or later
 * [vcfanno](https://www.github.com/brentp/vcfanno) v0.0.11
 * [svtools v0.2.0](https://github.com/hall-lab/svtools/releases/tag/v0.2.0)
