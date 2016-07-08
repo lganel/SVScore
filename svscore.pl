@@ -41,7 +41,7 @@ eval { # Catch errors
   my $homedir = (defined $options{'h'} ? $options{'h'} : '.');
   die "$homedir does not exist" unless -d $homedir;
   $homedir =~ s/\/$//; # Trim off trailing slash if it exists
-  my $precision = (defined $options{'p'} ? $options{'o'} : 3);
+  my $precision = (defined $options{'p'} ? $options{'p'} : 3);
 
   my @ops = uniq(split(/,/,$ops));
   my %operations = (); # Hash of chosen operations
