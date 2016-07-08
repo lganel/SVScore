@@ -13,7 +13,7 @@ grep -v "^#" stresstest.svscore.vcf > stresstest.svscore.noheader.vcf
 echo "********Stress Test********"
 echo "Generating annotation files"
 ../generateannotations.pl -c 1 -a 2 -b 3 -t 4 -s 5 -e 6 -f 7 dummyannotations.bed
-../svscore.pl -f dummyannotations.introns.bed -e dummyannotations.exons.bed -h .. -o max,sum,top2,top2weighted,top3weighted,top4weighted,mean,meanweighted -dvc dummyCADD.tsv.gz -i stresstest.vcf | grep -v "^#" > stresstest.svscore.test.vcf
+../svscore.pl -f dummyannotations.introns.bed -e dummyannotations.exons.bed -h .. -o max,sum,top2,top2weighted,top3weighted,top4weighted,mean,meanweighted -dvc dummyCADD.tsv.gz -p 2 -i stresstest.vcf | grep -v "^#" > stresstest.svscore.test.vcf
 echo -e "\n\n"
 
 diff stresstest.svscore.test.vcf stresstest.svscore.noheader.vcf > stresstest.diff
@@ -37,7 +37,7 @@ fi
 echo -e "********NA12878********"
 echo "Generating annotation files"
 ../generateannotations.pl
-../svscore.pl -o max,sum,top5,top10,mean -e refGene.exons.bed -f refGene.introns.bed -h .. -dvc ../$1 -i NA12878.sv.vcf | grep -v "^#" | perl -ne 's/(left_|right_)?Intron[^;]*;//g; s/(left_|right_)?ExonTranscript=[^;]*;//g; print' > NA12878.sv.svscore.test.vcf
+../svscore.pl -o max,sum,top5,top10,mean -e refGene.exons.bed -f refGene.introns.bed -h .. -dvc ../$1 -p 2 -i NA12878.sv.vcf | grep -v "^#" | perl -ne 's/(left_|right_)?Intron[^;]*;//g; s/(left_|right_)?ExonTranscript=[^;]*;//g; print' > NA12878.sv.svscore.test.vcf
 echo -e "\n\n"
 
 diff NA12878.sv.svscore.test.vcf NA12878.sv.svscore.noheader.vcf > NA12878.diff

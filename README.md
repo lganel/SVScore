@@ -12,6 +12,7 @@ usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] [-
     -f        Points to intron BED file (refGene.introns.bed)
     -c        Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
     -h	      Points to directory in which SVScore is installed (defaults to current directory)
+    -p	      Number of decimal places to which to round scores (3)
 
     --help    Display this message
     --version Display version

@@ -22,7 +22,7 @@ eval { # Catch errors
   my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
   my %options = ();
-  getopts('dvi:c:f:e:o:h:',\%options);
+  getopts('dvi:c:f:e:o:h:p:',\%options);
 
 # Parse command line options, set variables, check input parameters
   my $debug = defined $options{'d'};
@@ -41,6 +41,7 @@ eval { # Catch errors
   my $homedir = (defined $options{'h'} ? $options{'h'} : '.');
   die "$homedir does not exist" unless -d $homedir;
   $homedir =~ s/\/$//; # Trim off trailing slash if it exists
+  my $precision = (defined $options{'p'} ? $options{'o'} : 3);
 
   my @ops = uniq(split(/,/,$ops));
   my %operations = (); # Hash of chosen operations
@@ -288,15 +289,15 @@ eval { # Catch errors
 
     my %scores = (); # Interval => List of scores by op; e.g. (LEFT => (MAXLEFT, SUMLEFT, TOP100LEFT, MEANLEFT), RIGHT => (MAXRIGHT, SUMRIGHT, TOP100RIGHT, MEANRIGHT))
 
-    $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft);
-    $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
+    $scores{"LEFT"} = cscoreop($caddfile, $ops, $leftchrom, $leftstart, $leftstop, $probleft,$precision);
+    $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright,$precision);
     
     if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
       if ($rightstop - $leftstart > 1000000) {
 	my @hundred = (100) x @ops;
 	$scores{"SPAN"} = \@hundred;
       } else {
-	$scores{"SPAN"} = cscoreop($caddfile, $ops, $leftchrom, $pos+1, $end, -1);
+	$scores{"SPAN"} = cscoreop($caddfile, $ops, $leftchrom, $pos+1, $end, -1,$precision);
       }
     }
 
@@ -360,8 +361,8 @@ eval { # Catch errors
 
       my @lefttruncatedtranscripts = keys %lefttruncatedtranscripts;
       my @righttruncatedtranscripts = keys %righttruncatedtranscripts;
-      $scores{"LTRUNC"} = truncationscore($leftchrom, $pos, \@lefttruncatedtranscripts, \%transcripts, $caddfile, $ops, \%operations) if @lefttruncatedtranscripts;
-      $scores{"RTRUNC"} = truncationscore($rightchrom, $end, \@righttruncatedtranscripts, \%transcripts, $caddfile, $ops, \%operations) if @righttruncatedtranscripts;
+      $scores{"LTRUNC"} = truncationscore($leftchrom, $pos, \@lefttruncatedtranscripts, \%transcripts, $caddfile, $ops, \%operations, $precision) if @lefttruncatedtranscripts;
+      $scores{"RTRUNC"} = truncationscore($rightchrom, $end, \@righttruncatedtranscripts, \%transcripts, $caddfile, $ops, \%operations, $precision) if @righttruncatedtranscripts;
     }
 
     # This is an ugly loop which transposes %scores so that the keys are operations, not intervals
@@ -430,7 +431,7 @@ chomp $error;
 print STDERR "$error\n" if $error; # Relay error from eval to STDERR
 
 sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given region using CADD data. For left/right breakends, $start is the first possible breakpoint, and $stop is the final possible breakpoint (in BED coordinates). For span/truncation scores, [$start,$stop] is an inclusive interval of all the affected bases (in VCF coordinates). cscoreop will return -1 for any weighted operation on a variant without a PRPOS field. Giving -1 as $prpos signifies that scores should not be weighted (i.e. the score is a span/truncation score), while giving "" as $prpos signifies that the variant has no PRPOS field
-  my ($filename, $ops, $chrom, $start, $stop, $prpos) = @_;
+  my ($filename, $ops, $chrom, $start, $stop, $prpos, $precision) = @_;
   my @ops = uniq(split(/,/,$ops));
   my (@prpos,%probdist);
   my $spanortrunc = ($prpos eq -1);
@@ -441,6 +442,7 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
       $probdist{$i} = $prpos[$i-$start];
     }
   }
+  my $nearest = 10**-$precision;
   
   my (%bptscores,$res) = (); # %bptscores = {BEDcoordinate => Possiblebreakpointscore}
   $stop++ unless $spanortrunc; ## Increment end coordinate for tabix so that we capture the CADD score for the base following the interval to allow for calculation of a score for the final possible breakpoint
@@ -509,11 +511,11 @@ sub cscoreop { # Apply operation(s) specified in $ops to C scores within a given
     my $newscore;
     my @opscores = @{$opscorelistref}; # If $op is TOP, @opscores is @topnscores (which is weighted if $op is weighted). Otherwise, @opscores is @weightedbptscores if $op is weighted and the interval is left/right, keys %bptscores if $op is not weighted and the interval is left/right, or keys %basescores if the interval is span/trunc
     if ($op eq "MAX") {
-      $newscore = nearest(0.001,max(@opscores));
+      $newscore = nearest($nearest,max(@opscores));
     } elsif ($op eq "SUM" || $weightedop) { # Compute sum of @opscores if $op is SUM, or if the op is weighted and we're on a breakend, in which case, @opscores is @weightedbptscores (or a subset of it in the TOP case), so the sum of @opscores is the weighted mean of @scores (or of the subset, if $op begins with TOP)
-      $newscore = nearest(0.001,sum(@opscores));
+      $newscore = nearest($nearest,sum(@opscores));
     } elsif ($op eq "MEAN" || $op =~ /^TOP\d+$/ || ($op =~ /WEIGHTED/ && $prpos eq -1)) { # Compute mean of @opscores if $op is MEAN or TOP, or if $op is MEANWEIGHTED or TOP\d+WEIGHTED and we're on the span/truncation score
-      $newscore = nearest(0.001,sum(@opscores)/scalar(@opscores));
+      $newscore = nearest($nearest,sum(@opscores)/scalar(@opscores));
     } else {
       die "Error: Unrecognized operation: $op"
     }
@@ -553,7 +555,7 @@ sub getfields { # Parse info field of VCF line, getting fields specified in @_. 
 }
 
 sub truncationscore { # Calculate truncation score based on the BED coordinates of a given breakend and the names of the transcripts it hits
-  my ($chrom, $pos, $introntranscriptsref, $transcriptsref, $caddfile, $ops, $operationsref) = @_;
+  my ($chrom, $pos, $introntranscriptsref, $transcriptsref, $caddfile, $ops, $operationsref, $precision) = @_;
   my @ops = split (/,/,$ops);
   my @introntranscripts = @{$introntranscriptsref};
   return "" unless @introntranscripts;
@@ -564,9 +566,9 @@ sub truncationscore { # Calculate truncation score based on the BED coordinates 
     my ($transcriptstart,$transcriptstop,$transcriptstrand) = @{$transcripts{$transcript}->{$chrom}}[0..2];	
     my $cscoreopres;
     if ($transcriptstrand eq '+') {
-      $cscoreopres = cscoreop($caddfile, $ops, $chrom, max($transcriptstart,$pos+1),$transcriptstop, -1); # Start from beginning of transcript or breakend, whichever is further right, stop at end of transcript
+      $cscoreopres = cscoreop($caddfile, $ops, $chrom, max($transcriptstart,$pos+1),$transcriptstop, -1, $precision); # Start from beginning of transcript or breakend, whichever is further right, stop at end of transcript
     } else {
-      $cscoreopres = cscoreop($caddfile, $ops, $chrom, $transcriptstart,min($transcriptstop,$pos), -1); # Start from beginning of transcript, stop at end of transcript or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
+      $cscoreopres = cscoreop($caddfile, $ops, $chrom, $transcriptstart,min($transcriptstop,$pos), -1, $precision); # Start from beginning of transcript, stop at end of transcript or breakend, whichever is further left (this is technically backwards, but none of the supported operations are order-dependent)
     }
     foreach my $op (keys %operations) {
       push @{$truncationscores{$op}}, $cscoreopres->[$operations{$op}];
@@ -605,6 +607,7 @@ sub main::HELP_MESSAGE() {
     -f	      Points to intron BED file (refGene.introns.bed)
     -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
     -h	      Points to directory in which SVScore is installed (defaults to current directory)
+    -p	      Number of decimal places to which to round scores (3)
 
     --help    Display this message
     --version Display version\n"
