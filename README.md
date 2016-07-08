@@ -3,7 +3,7 @@ SVScore is a VCF annotation tool which scores structural variants by predicted p
 
 ## Usage
 ```
-usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] [-h SVScoredir] -i vcf
+usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] [-h SVScoredir] [-p precision] -i vcf
     -i        Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use \"-i stdin\" if using standard input
     -d        Debug mode, keeps intermediate and supporting files, displays progress
     -v        Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
@@ -20,8 +20,12 @@ usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] [-
 
 ## First Time Setup
 After downloading SVScore, there are a few steps to follow before it is ready to use.
-  1. Run setup.sh. This will test SVScore to ensure all dependencies are met. setup.sh takes as an argument the path to the user's copy of whole_genome_SNVs.tsv.gz, e.g. `sh setup.sh /path/to/whole_genome_SNVs.tsv.gz`
-  2. If planning to use the default (refGene) annotations, simply execute `./generateannotations.pl` to generate the annotation files required by SVScore. If planning to use a custom annotation track, `generateannotations.pl` can be used to generate custom annotation files, or the user can generate them manually (though this is not recommended).
+  1. Test SVScore using `sh tests/test.sh path/to/whole_genome_SNVs.tsv.gz`
+  2. Generate annotation files. For more on this, see [Annotation Files](#annotation-files).
+  3. SVScore assumes the user's version of perl is installed in the default directory (`/usr/bin/perl`). If this is not the case, the first line of all .pl files should be changed to reflect the correct perl installation directory.
+
+## Annotation Files
+    * If planning to use the default (refGene) annotations, simply execute `./generateannotations.pl` to generate the annotation files required by SVScore. If planning to use a custom annotation track, `generateannotations.pl` can be used to generate custom annotation files, or the user can generate them manually (though this is not recommended).
     * If generating custom annotation files using `generateannotations.pl`, the user must supply an annotation track in which each line represents a transcript and contains the following columns: chromosome, transcript start position, transcript stop position, transcript strand, transcript name, exon start positions (comma-delimited), and exon stop positions (comma-delimited). Command line options must be used to specify each column number. To see usage instructions, execute `./generateannotations.pl --help`. `generateannotations.pl` will create two files in the current directory, named based on the prefix to the input file - [prefix].introns.bed and [prefix].exons.bed. These should be specified to SVScore using the -e and -f options.
     * **If generating custom annotation files for SVScore manually, users should ensure that each transcript has a unique name.** Annotation files should contain the following columns, in order:
       * Exon file:
@@ -38,7 +42,6 @@ After downloading SVScore, there are a few steps to follow before it is ready to
             * 3 - Intron stop position
             * 4 - Transcript name
             * 5 - Intron number (arbitrary, but must be unique. Line number works well)
-  3. SVScore assumes the user's version of perl is installed in the default directory (`/usr/bin/perl`). If this is not the case, the first line of all .pl files should be changed to reflect the correct perl installation directory.
 
 ## Output
 SVScore outputs a VCF file with scores added to the INFO field of each variant. The VCF header is also updated to include those scores which are added. Each score field has the following format: SVSCORE\[op\](_[interval]), where [op] represents the operation used to calculate that score (see [Operations](#operations)) and [interval] represents the interval over which the score was calculated, which is one of left breakend, right breakend, span (for DEL/DUP), left truncation score (for INV/DEL/INS variants which seem to truncate a transcript on the left side, the interval is from the most likely base of the left breakend to the end of the transcript), and right truncation score. Scores with no interval listed (such as SVSCOREMAX=) are the maximum over all intervals for that operation.

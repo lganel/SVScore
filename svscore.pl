@@ -598,7 +598,7 @@ sub replaceoraddfield {
 }
 
 sub main::HELP_MESSAGE() {
-  print STDERR "usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] [-h SVScoredir] -i vcf
+  print STDERR "usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] [-h SVScoredir] [-p precision] -i vcf
     -i	      Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use \"-i stdin\" if using standard input
     -d	      Debug mode, keeps intermediate and supporting files, displays progress
     -v	      Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
