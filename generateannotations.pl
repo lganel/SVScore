@@ -8,7 +8,7 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1;
 $main::VERSION = '0.1';
 
 my %options = ();
-getopts('a:b:c:t:g:e:f:s:',\%options);
+getopts('a:b:c:t:g:e:f:s:o:',\%options);
 
 my $chromcolumn = (defined $options{'c'} ? $options{'c'} : 3);
 my $startcolumn = (defined $options{'a'} ? $options{'a'} : 5);
@@ -17,6 +17,8 @@ my $transcriptcolumn = (defined $options{'t'} ? $options{'t'} : 2);
 my $exonstartcolumn = (defined $options{'e'} ? $options{'e'} : 10);
 my $exonstopcolumn = (defined $options{'f'} ? $options{'f'} : 11);
 my $strandcolumn = (defined $options{'s'} ? $options{'s'} : 4);
+my $outputdir = (defined $options{'o'} ? $options{'o'} : "");
+$outputdir .= "/" if $options{'o'} && $outputdir !~ /\/$/;
 my ($inputfile,$prefix);
 if (defined $ARGV[0]) {
   $inputfile = $ARGV[0];
@@ -26,9 +28,11 @@ if (defined $ARGV[0]) {
   $prefix = "refGene";
 }
 
+my $intronfile = "$outputdir$prefix.introns.bed";
+my $exonfile = "$outputdir$prefix.exons.bed";
 open(IN, $inputfile) || die "Download/opening of refGene file failed";
-open(INTRON,"> $prefix.introns.bed") || die "Could not open introns.$prefix.bed for writing";
-open(EXON,"> $prefix.exons.bed") || die "Could not open exons.$prefix.bed for writing";
+open(INTRON,"> $intronfile") || die "Could not open $intronfile for writing";
+open(EXON,"> $exonfile") || die "Could not open $exonfile for writing";
 
 my %names = ();
 my $intronnumber = 1;
@@ -74,11 +78,15 @@ close EXON;
 close INTRON;
 close IN;
 
-!system("sort -k1,1V -k2,2n -k3,3n $prefix.introns.bed | uniq > $prefix.introns.sort.bed; mv -f $prefix.introns.sort.bed $prefix.introns.bed") || die "Intron file sorting failed";
-!system("sort -k1,1V -k2,2n -k3,3n $prefix.exons.bed | uniq > $prefix.exons.sort.bed; mv -f $prefix.exons.sort.bed $prefix.exons.bed") || die "Exon file sorting failed";
+my $sortedintronfile = "$outputdir$prefix.introns.sort.bed";
+my $sortedexonfile = "$outputdir$prefix.exons.sort.bed";
+
+!system("sort -k1,1V -k2,2n -k3,3n $intronfile | uniq > $sortedintronfile;  mv -f $sortedintronfile $intronfile") || die "Intron file sorting failed";
+!system("sort -k1,1V -k2,2n -k3,3n $exonfile | uniq > $sortedexonfile;  mv -f $sortedexonfile $exonfile") || die "Exon file sorting failed";
 
 sub main::HELP_MESSAGE(){
-  print STDERR "usage: ./generateannotations.pl [-c chromcolumn] [-a startcolumn] [-b stopcolumn] [-t transcriptcolumn] [-e exonstartcolumn] [-f exonstopcolumn] [-s strandcolumn] [file]
+  print STDERR "usage: ./generateannotations.pl [-o outputdir] [-c chromcolumn] [-a startcolumn] [-b stopcolumn] [-t transcriptcolumn] [-e exonstartcolumn] [-f exonstopcolumn] [-s strandcolumn] [file]
+    -o	      Path to directory in which to save annotation files (current directory)
     -c	      Chromosome column (3)
     -a	      Transcript start column (5)
     -b	      Transcript stop column (6)
