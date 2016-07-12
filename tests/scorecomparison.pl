@@ -4,8 +4,8 @@ use strict;
 
 my ($testname,$truthfile,$testfile) = @ARGV;
 
-die "********$testname FAILED: $truthfile EMPTY OR NONEXISTENT - DID SVSCORE DOWNLOAD SUCCEED?********\n" unless -s $truthfile;
-die "********$testname FAILED: $testfile EMPTY OR NONEXISTENT - IS SVSCORE PROVIDING OUTPUT?********\n" unless -s $testfile;
+printmessage("$testname FAILED: $truthfile EMPTY OR NONEXISTENT - DID SVSCORE DOWNLOAD SUCCEED?",1) unless -s $truthfile;
+printmessage("$testname FAILED: $testfile EMPTY OR NONEXISTENT - IS SVSCORE PROVIDING OUTPUT?",1) unless -s $testfile;
 
 open(TRUTH,"< $truthfile") || die "Can't open $truthfile: $!";
 open(TEST,"< $testfile") || die "Can't open $testfile: $!";
