@@ -10,7 +10,7 @@ die "********$testname FAILED: $testfile EMPTY OR NONEXISTENT - IS SVSCORE PROVI
 open(TRUTH,"< $truthfile") || die "Can't open $truthfile: $!";
 open(TEST,"< $testfile") || die "Can't open $testfile: $!";
 
-my $proximity = 0.05; # To be considered the same, the min score (between truth and test) must be within 5% of the max score
+my $proximity = 0.001; # For two scores to be considered the same, the min score (between truth and test) must be within 0.1% of the max score
 my $success = 1;
 while (my $truthline = <TRUTH>) {
   my $testline = <TEST>;
@@ -21,10 +21,10 @@ while (my $truthline = <TRUTH>) {
   my @testsplit = split(/\s+/,$testline);
   my ($testid, $testinfo) = @testsplit[2,7];
   my @testscores = grep {/^SVSCORE/} split(/;/,$testinfo); # Get SVScore annotations from test file
-  die "********$testname FAILED: IDS $truthid AND $testid DON'T MATCH AT LINE $. ($truthid in $truthfile and $testid in $testfile)********" unless $truthid eq $testid;
-  die "********$testname FAILED: ID $truthid LINE HAS DIFFERING NUMBERS OF FIELDS (",scalar @truthsplit," in $truthfile and ",scalar @testsplit," in $testfile)********" unless @truthsplit == @testsplit;
+  printmessage("$testname FAILED: IDS $truthid AND $testid DON'T MATCH AT LINE $. ($truthid in $truthfile and $testid in $testfile)",1) unless $truthid eq $testid;
+  printmessage("$testname FAILED: ID $truthid LINE HAS DIFFERING NUMBERS OF FIELDS (",scalar @truthsplit," in $truthfile and ",scalar @testsplit," in $testfile)",1) unless @truthsplit == @testsplit;
   foreach my $i (0..6,8..$#truthsplit) {
-    die "********$testname FAILED: ID $truthid LINE DIFFERS AT COLUMN ",$i+1," ($truthsplit[$i] in $truthfile and $testsplit[$i] in $testfile)********" unless $truthsplit[$i] eq $testsplit[$i];
+    printmessage("$testname FAILED: ID $truthid LINE DIFFERS AT COLUMN ",$i+1," ($truthsplit[$i] in $truthfile and $testsplit[$i] in $testfile)",1) unless $truthsplit[$i] eq $testsplit[$i];
   }
   my %truthscores = createscorehash(\@truthscores); # Place scores in hash
   my %alltruthscores = %truthscores; # Copy for later use
@@ -43,7 +43,7 @@ while (my $truthline = <TRUTH>) {
   }
   @missingintruth = keys %testscores; # Everything left in the test hash must be missing from the truth hash
   if (@missingintruth || @missingintest || @different) { # Print error messages on individual lines
-    print "********$testname FAILED!********\n" if $success; # If this is the first error, print failure message
+    printmessage("$testname FAILED!") if $success; # If this is the first error, print failure message
     $success = 0;
     if (@missingintruth) {
       print "ID $truthid: ",join(', ',@missingintruth)," missing in $truthfile\n";
@@ -60,7 +60,7 @@ while (my $truthline = <TRUTH>) {
   }
 }
 
-print "********$testname PASSED********\n" if $success;
+printmessage("$testname PASSED") if $success;
 
 sub createscorehash {
   my %scorehash = ();
@@ -70,4 +70,11 @@ sub createscorehash {
     $scorehash{$pair[0]} = $pair[1];
   }
   return %scorehash;
+}
+
+sub printmessage {
+  my ($message, $die) = @_;
+  my $length = length($message);
+  print "\n","*" x ($length+4),"\n*"," " x ($length+2),"*\n* $message *\n*"," " x ($length+2),"*\n", "*" x ($length+4),"\n";
+  exit if $die;
 }
