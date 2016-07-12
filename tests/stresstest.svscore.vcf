@@ -1,3 +1,110 @@
+##fileformat=VCFv4.2
+##fileDate=20160712
+##reference=
+##INFO=<ID=SVLEN,Number=.,Type=Integer,Description="Difference in length between REF and ALT alleles">
+##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">
+##INFO=<ID=POS,Number=1,Type=Integer,Description="Position of the variant described in this record">
+##INFO=<ID=SECONDARY,Number=0,Type=Flag,Description="Secondary breakend in a multi-line variants">
+##INFO=<ID=SU,Number=.,Type=Integer,Description="Number of pieces of evidence supporting the variant across all samples">
+##INFO=<ID=EV,Number=.,Type=String,Description="Type of LUMPY evidence contributing to the variant call">
+##INFO=<ID=CIEND95,Number=2,Type=Integer,Description="Confidence interval (95%) around END for imprecise variants">
+##INFO=<ID=EVENT,Number=1,Type=String,Description="ID of event associated to breakend">
+##INFO=<ID=SR,Number=.,Type=Integer,Description="Number of split reads supporting the variant across all samples">
+##INFO=<ID=PREND,Number=.,Type=String,Description="LUMPY probability curve of the END breakend">
+##INFO=<ID=STRANDS,Number=.,Type=String,Description="Strand orientation of the adjacency in BEDPE format (DEL:+-, DUP:-+, INV:++/--)">
+##INFO=<ID=CIPOS,Number=2,Type=Integer,Description="Confidence interval around POS for imprecise variants">
+##INFO=<ID=CIEND,Number=2,Type=Integer,Description="Confidence interval around END for imprecise variants">
+##INFO=<ID=CIPOS95,Number=2,Type=Integer,Description="Confidence interval (95%) around POS for imprecise variants">
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record">
+##INFO=<ID=ALG,Number=1,Type=String,Description="Evidence PDF aggregation algorithm">
+##INFO=<ID=MATEID,Number=.,Type=String,Description="ID of mate breakends">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+##INFO=<ID=IMPRECISE,Number=0,Type=Flag,Description="Imprecise structural variation">
+##INFO=<ID=PE,Number=.,Type=Integer,Description="Number of paired-end reads supporting the variant across all samples">
+##INFO=<ID=PRPOS,Number=.,Type=String,Description="LUMPY probability curve of the POS breakend">
+##INFO=<ID=ExonTranscript,Number=.,Type=String,Description="calculated by uniq of overlapping values in column 4 from tests/dummyannotations.exons.bed.gz">
+##INFO=<ID=Intron,Number=.,Type=String,Description="calculated by concat of overlapping values in column 5 from tests/dummyannotations.introns.bed.gz">
+##INFO=<ID=IntronTranscript,Number=.,Type=String,Description="calculated by concat of overlapping values in column 4 from tests/dummyannotations.introns.bed.gz">
+##INFO=<ID=left_ExonTranscript,Number=.,Type=String,Description="calculated by uniq of overlapping values in column 4 from tests/dummyannotations.exons.bed.gz at end left">
+##INFO=<ID=left_Intron,Number=.,Type=String,Description="calculated by concat of overlapping values in column 5 from tests/dummyannotations.introns.bed.gz at end left">
+##INFO=<ID=left_IntronTranscript,Number=.,Type=String,Description="calculated by concat of overlapping values in column 4 from tests/dummyannotations.introns.bed.gz at end left">
+##INFO=<ID=right_ExonTranscript,Number=.,Type=String,Description="calculated by uniq of overlapping values in column 4 from tests/dummyannotations.exons.bed.gz at end right">
+##INFO=<ID=right_Intron,Number=.,Type=String,Description="calculated by concat of overlapping values in column 5 from tests/dummyannotations.introns.bed.gz at end right">
+##INFO=<ID=right_IntronTranscript,Number=.,Type=String,Description="calculated by concat of overlapping values in column 4 from tests/dummyannotations.introns.bed.gz at end right">
+##INFO=<ID=SVSCOREMAX,Number=1,Type=Float,Description="Maximum of SVSCOREMAX fields of structural variant">
+##INFO=<ID=SVSCOREMAX_LEFT,Number=1,Type=Float,Description="Maximum C score in left breakend of structural variant">
+##INFO=<ID=SVSCOREMAX_RIGHT,Number=1,Type=Float,Description="Maximum C score in right breakend of structural variant">
+##INFO=<ID=SVSCOREMAX_SPAN,Number=1,Type=Float,Description="Maximum C score in span of structural variant">
+##INFO=<ID=SVSCOREMAX_LTRUNC,Number=1,Type=Float,Description="Maximum C score from beginning of left breakend to end of truncated transcript">
+##INFO=<ID=SVSCOREMAX_RTRUNC,Number=1,Type=Float,Description="Maximum C score from beginning of right breakend to end of truncated transcript">
+##INFO=<ID=SVSCORESUM,Number=1,Type=Float,Description="Maximum of SVSCORESUM fields of structural variant">
+##INFO=<ID=SVSCORESUM_LEFT,Number=1,Type=Float,Description="Sum of C scores in left breakend of structural variant">
+##INFO=<ID=SVSCORESUM_RIGHT,Number=1,Type=Float,Description="Sum of C scores in right breakend of structural variant">
+##INFO=<ID=SVSCORESUM_SPAN,Number=1,Type=Float,Description="Sum of C scores in outer span of structural variant">
+##INFO=<ID=SVSCORESUM_LTRUNC,Number=1,Type=Float,Description="Sum of C scores from beginning of left breakend to end of truncated transcript">
+##INFO=<ID=SVSCORESUM_RTRUNC,Number=1,Type=Float,Description="Sum of C scores from beginning of right breakend to end of truncated transcript">
+##INFO=<ID=SVSCORETOP2,Number=1,Type=Float,Description="Maximum of SVSCORETOP2 fields of structural variant">
+##INFO=<ID=SVSCORETOP2_LEFT,Number=1,Type=Float,Description="Mean of top 2 C scores in left breakend of structural variant">
+##INFO=<ID=SVSCORETOP2_RIGHT,Number=1,Type=Float,Description="Mean of top 2 C scores in right breakend of structural variant">
+##INFO=<ID=SVSCORETOP2_SPAN,Number=1,Type=Float,Description="Mean of top 2 C scores in outer span of structural variant">
+##INFO=<ID=SVSCORETOP2_LTRUNC,Number=1,Type=Float,Description="Mean of top 2 C scores from beginning of left breakend to end of truncated transcript">
+##INFO=<ID=SVSCORETOP2_RTRUNC,Number=1,Type=Float,Description="Mean of top 2 C scores from beginning of right breakend to end of truncated transcript">
+##INFO=<ID=SVSCORETOP2WEIGHTED,Number=1,Type=Float,Description="Maximum of SVSCORETOP2WEIGHTED fields of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP2WEIGHTED_LEFT,Number=1,Type=Float,Description="Mean of top 2 C scores in left breakend of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP2WEIGHTED_RIGHT,Number=1,Type=Float,Description="Mean of top 2 C scores in right breakend of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP2WEIGHTED_SPAN,Number=1,Type=Float,Description="Mean of top 2 C scores in outer span of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP2WEIGHTED_LTRUNC,Number=1,Type=Float,Description="Mean of top 2 C scores from beginning of left breakend to end of truncated transcript, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP2WEIGHTED_RTRUNC,Number=1,Type=Float,Description="Mean of top 2 C scores from beginning of right breakend to end of truncated transcript, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP3WEIGHTED,Number=1,Type=Float,Description="Maximum of SVSCORETOP3WEIGHTED fields of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP3WEIGHTED_LEFT,Number=1,Type=Float,Description="Mean of top 3 C scores in left breakend of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP3WEIGHTED_RIGHT,Number=1,Type=Float,Description="Mean of top 3 C scores in right breakend of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP3WEIGHTED_SPAN,Number=1,Type=Float,Description="Mean of top 3 C scores in outer span of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP3WEIGHTED_LTRUNC,Number=1,Type=Float,Description="Mean of top 3 C scores from beginning of left breakend to end of truncated transcript, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP3WEIGHTED_RTRUNC,Number=1,Type=Float,Description="Mean of top 3 C scores from beginning of right breakend to end of truncated transcript, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP4WEIGHTED,Number=1,Type=Float,Description="Maximum of SVSCORETOP4WEIGHTED fields of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP4WEIGHTED_LEFT,Number=1,Type=Float,Description="Mean of top 4 C scores in left breakend of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP4WEIGHTED_RIGHT,Number=1,Type=Float,Description="Mean of top 4 C scores in right breakend of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP4WEIGHTED_SPAN,Number=1,Type=Float,Description="Mean of top 4 C scores in outer span of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP4WEIGHTED_LTRUNC,Number=1,Type=Float,Description="Mean of top 4 C scores from beginning of left breakend to end of truncated transcript, weighted by probability distribution">
+##INFO=<ID=SVSCORETOP4WEIGHTED_RTRUNC,Number=1,Type=Float,Description="Mean of top 4 C scores from beginning of right breakend to end of truncated transcript, weighted by probability distribution">
+##INFO=<ID=SVSCOREMEAN,Number=1,Type=Float,Description="Maximum of SVSCOREMEAN fields of structural variant">
+##INFO=<ID=SVSCOREMEAN_LEFT,Number=1,Type=Float,Description="Mean of C scores in left breakend of structural variant">
+##INFO=<ID=SVSCOREMEAN_RIGHT,Number=1,Type=Float,Description="Mean of C scores in right breakend of structural variant">
+##INFO=<ID=SVSCOREMEAN_SPAN,Number=1,Type=Float,Description="Mean of C scores in outer span of structural variant">
+##INFO=<ID=SVSCOREMEAN_LTRUNC,Number=1,Type=Float,Description="Mean of C scores from beginning of left breakend to end of truncated transcript">
+##INFO=<ID=SVSCOREMEAN_RTRUNC,Number=1,Type=Float,Description="Mean of C scores from beginning of right breakend to end of truncated transcript">
+##INFO=<ID=SVSCOREMEANWEIGHTED,Number=1,Type=Float,Description="Maximum of SVSCOREMEANWEIGHTED fields of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCOREMEANWEIGHTED_LEFT,Number=1,Type=Float,Description="Mean of C scores in left breakend of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCOREMEANWEIGHTED_RIGHT,Number=1,Type=Float,Description="Mean of C scores in right breakend of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCOREMEANWEIGHTED_SPAN,Number=1,Type=Float,Description="Mean of C scores in outer span of structural variant, weighted by probability distribution">
+##INFO=<ID=SVSCOREMEANWEIGHTED_LTRUNC,Number=1,Type=Float,Description="Mean of C scores from beginning of left breakend to end of truncated transcript, weighted by probability distribution">
+##INFO=<ID=SVSCOREMEANWEIGHTED_RTRUNC,Number=1,Type=Float,Description="Mean of C scores from beginning of right breakend to end of truncated transcript, weighted by probability distribution">
+##ALT=<ID=DEL,Description="Deletion">
+##ALT=<ID=DUP,Description="Duplication">
+##ALT=<ID=INV,Description="Inversion">
+##ALT=<ID=DUP:TANDEM,Description="Tandem duplication">
+##ALT=<ID=INS,Description="Insertion of novel sequence">
+##ALT=<ID=CNV,Description="Copy number variable region">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=SU,Number=1,Type=Integer,Description="Number of pieces of evidence supporting the variant">
+##FORMAT=<ID=AS,Number=A,Type=Integer,Description="Alternate allele split-read observation count, with partial observations recorded fractionally">
+##FORMAT=<ID=RP,Number=1,Type=Integer,Description="Reference allele paired-end observation count, with partial observations recorded fractionally">
+##FORMAT=<ID=AP,Number=A,Type=Integer,Description="Alternate allele paired-end observation count, with partial observations recorded fractionally">
+##FORMAT=<ID=RO,Number=1,Type=Integer,Description="Reference allele observation count, with partial observations recorded fractionally">
+##FORMAT=<ID=QR,Number=1,Type=Integer,Description="Sum of quality of reference observations">
+##FORMAT=<ID=QA,Number=A,Type=Integer,Description="Sum of quality of alternate observations">
+##FORMAT=<ID=AB,Number=A,Type=Float,Description="Allele balance, fraction of observations from alternate allele, QA/(QR+QA)">
+##FORMAT=<ID=GQ,Number=1,Type=Float,Description="Genotype quality">
+##FORMAT=<ID=PE,Number=1,Type=Integer,Description="Number of paired-end reads supporting the variant">
+##FORMAT=<ID=SR,Number=1,Type=Integer,Description="Number of split reads supporting the variant">
+##FORMAT=<ID=SQ,Number=1,Type=Float,Description="Phred-scaled probability that this site is variant (non-reference in this sample">
+##FORMAT=<ID=GL,Number=G,Type=Float,Description="Genotype Likelihood, log10-scaled likelihoods of the data given the called genotype for each possible genotype generated from the reference and alternate alleles given the sample ploidy">
+##FORMAT=<ID=AO,Number=A,Type=Integer,Description="Alternate allele observations, with partial observations recorded fractionally">
+##FORMAT=<ID=BD,Number=1,Type=Integer,Description="Amount of BED evidence supporting the variant">
+##FORMAT=<ID=RS,Number=1,Type=Integer,Description="Reference allele split-read observation count, with partial observations recorded fractionally">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=CN,Number=1,Type=Float,Description="Copy number of structural variant segment.">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT
 1	71	1_1	N	N]1:100]	841.8	LOW	SVTYPE=BND;POS=71;SU=4;CIEND95=0,0;EVENT=1;SR=4;PREND=1;STRANDS=++:4;CIPOS=0,0;CIEND=0,0;CIPOS95=0,0;ALG=SUM;MATEID=1_2;AF=0.02181;PE=0;PRPOS=1;SVSCOREMAX=4.25;SVSCOREMAX_LEFT=4.25;SVSCOREMAX_RIGHT=-1;SVSCORESUM=4.25;SVSCORESUM_LEFT=4.25;SVSCORESUM_RIGHT=-1;SVSCORETOP2=4.25;SVSCORETOP2_LEFT=4.25;SVSCORETOP2_RIGHT=-1;SVSCORETOP2WEIGHTED=4.25;SVSCORETOP2WEIGHTED_LEFT=4.25;SVSCORETOP2WEIGHTED_RIGHT=-1;SVSCORETOP3WEIGHTED=4.25;SVSCORETOP3WEIGHTED_LEFT=4.25;SVSCORETOP3WEIGHTED_RIGHT=-1;SVSCORETOP4WEIGHTED=4.25;SVSCORETOP4WEIGHTED_LEFT=4.25;SVSCORETOP4WEIGHTED_RIGHT=-1;SVSCOREMEAN=4.25;SVSCOREMEAN_LEFT=4.25;SVSCOREMEAN_RIGHT=-1;SVSCOREMEANWEIGHTED=4.25;SVSCOREMEANWEIGHTED_LEFT=4.25;SVSCOREMEANWEIGHTED_RIGHT=-1	GT	1/1
 1	71	2	N	<DUP>	841.8	LOW	SVTYPE=DUP;POS=71;SU=4;CIEND95=0,0;EVENT=2;SR=4;PREND=1;STRANDS=++:4;CIPOS=0,0;CIEND=0,0;CIPOS95=0,0;END=90;ALG=SUM;AF=0.02181;PE=0;PRPOS=1;ExonTranscript=GeneX;right_ExonTranscript=GeneX;SVSCOREMAX=10;SVSCOREMAX_LEFT=4.25;SVSCOREMAX_RIGHT=8.5;SVSCOREMAX_SPAN=10;SVSCORESUM=40.5;SVSCORESUM_LEFT=4.25;SVSCORESUM_RIGHT=8.5;SVSCORESUM_SPAN=40.5;SVSCORETOP2=9.5;SVSCORETOP2_LEFT=4.25;SVSCORETOP2_RIGHT=8.5;SVSCORETOP2_SPAN=9.5;SVSCORETOP2WEIGHTED=9.5;SVSCORETOP2WEIGHTED_LEFT=4.25;SVSCORETOP2WEIGHTED_RIGHT=8.5;SVSCORETOP2WEIGHTED_SPAN=9.5;SVSCORETOP3WEIGHTED=9;SVSCORETOP3WEIGHTED_LEFT=4.25;SVSCORETOP3WEIGHTED_RIGHT=8.5;SVSCORETOP3WEIGHTED_SPAN=9;SVSCORETOP4WEIGHTED=8.5;SVSCORETOP4WEIGHTED_LEFT=4.25;SVSCORETOP4WEIGHTED_RIGHT=8.5;SVSCORETOP4WEIGHTED_SPAN=8.25;SVSCOREMEAN=8.5;SVSCOREMEAN_LEFT=4.25;SVSCOREMEAN_RIGHT=8.5;SVSCOREMEAN_SPAN=6.75;SVSCOREMEANWEIGHTED=8.5;SVSCOREMEANWEIGHTED_LEFT=4.25;SVSCOREMEANWEIGHTED_RIGHT=8.5;SVSCOREMEANWEIGHTED_SPAN=6.75	GT	1/1
 1	72	3_1	N	N]1:100]	841.8	LOW	SVTYPE=BND;POS=72;SU=4;CIEND95=0,0;EVENT=3;SR=4;PREND=1;STRANDS=++:4;CIPOS=0,0;CIEND=0,0;CIPOS95=0,0;ALG=SUM;MATEID=3_2;AF=0.02181;PE=0;PRPOS=1;SVSCOREMAX=-1;SVSCOREMAX_LEFT=-1;SVSCOREMAX_RIGHT=-1;SVSCORESUM=-1;SVSCORESUM_LEFT=-1;SVSCORESUM_RIGHT=-1;SVSCORETOP2=-1;SVSCORETOP2_LEFT=-1;SVSCORETOP2_RIGHT=-1;SVSCORETOP2WEIGHTED=-1;SVSCORETOP2WEIGHTED_LEFT=-1;SVSCORETOP2WEIGHTED_RIGHT=-1;SVSCORETOP3WEIGHTED=-1;SVSCORETOP3WEIGHTED_LEFT=-1;SVSCORETOP3WEIGHTED_RIGHT=-1;SVSCORETOP4WEIGHTED=-1;SVSCORETOP4WEIGHTED_LEFT=-1;SVSCORETOP4WEIGHTED_RIGHT=-1;SVSCOREMEAN=-1;SVSCOREMEAN_LEFT=-1;SVSCOREMEAN_RIGHT=-1;SVSCOREMEANWEIGHTED=-1;SVSCOREMEANWEIGHTED_LEFT=-1;SVSCOREMEANWEIGHTED_RIGHT=-1	GT	1/1

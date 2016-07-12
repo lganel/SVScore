@@ -397,6 +397,7 @@ eval { # Catch errors
   print `grep -v "^#" $vcfout | sort -k1,1V -k2,2n | cat $vcfout.header -`;
   push @todelete, $vcfout,"$vcfout.header";
 
+  print STDERR "\n" if $debug;
   die ";;" . join(',',@todelete); ## Signal to the rest of the program that the eval block terminated successfully
 };
 
