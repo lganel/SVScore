@@ -1,3 +1,10 @@
+## 0.6 (In development)
+  * Testing now uses custom script instead of diff, allowing for small differences resulting from differing Perl version
+  * Removed -h. SVScore now depends on a system variable called $SVSCOREDIR
+  * Removed setup.sh
+  * Added -o option to generateannotations.pl
+  * Simplified test.sh, made output look prettier
+
 ## 0.5.1 (06/20/16)
  * Compatibility with vcfanno v0.0.11 (which provides relevant bug fixes)
  * Calculate truncation scores for MEIs

@@ -3,7 +3,7 @@ SVScore is a VCF annotation tool which scores structural variants by predicted p
 
 ## Usage
 ```
-usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] [-h SVScoredir] [-p precision] -i vcf
+usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i vcf
     -i        Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use \"-i stdin\" if using standard input
     -d        Debug mode, keeps intermediate and supporting files, displays progress
     -v        Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
@@ -11,8 +11,6 @@ usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] [-
     -e        Points to exon BED file (refGene.exons.bed)
     -f        Points to intron BED file (refGene.introns.bed)
     -c        Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
-    -h	      Points to directory in which SVScore is installed (defaults to current directory)
-    -p	      Number of decimal places to which to round scores (3)
 
     --help    Display this message
     --version Display version
