@@ -3,7 +3,8 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-echo -e "********Testing SVScore. Some warnings beginning with \"Warning: missing secondary multiline variant at ID:\" are normal********\n\n"
+echo "********Testing SVScore. Some warnings beginning with \"Warning: missing secondary multiline variant at ID:\" are normal********"
+echo
 
 # Perform stress test
 echo "**************"
