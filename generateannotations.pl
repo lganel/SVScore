@@ -93,7 +93,7 @@ sub main::HELP_MESSAGE(){
     -t	      Transcript name column (2)
     -e	      Exon start positions column (must be comma delimited) (10)
     -f	      Exon stop positions column (must be comma delimited) (11)
-    -s	      Strand column
+    -s	      Strand column (4)
     
     --help    Display this message
     --version Display version\n"
