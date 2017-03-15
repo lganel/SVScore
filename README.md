@@ -89,7 +89,7 @@ For SPAN/LTRUNC/RTRUNC, these operations are applied to the scores of the bases 
 * A Linux-like system with a Bash-like shell, with sh, cd, sort (**With version sort, i.e. a -V option**), cat, zcat, rm, rmdir, diff, echo, chmod, grep, and awk
 * Perl v5.10.1 or later
 * [vcfanno](https://www.github.com/brentp/vcfanno) v0.0.11
-* [svtools v0.2.0](https://github.com/hall-lab/svtools/releases/tag/v0.2.0)
+* [svtools](https://github.com/hall-lab/svtools/releases/latest) v0.2.0 or later
 * whole_genome_SNVs.tsv.gz (and .tbi) - file of all possible hg19/GRCh37 SNVs and associated C scores from v1.3 of [CADD](http://cadd.gs.washington.edu/download) 
 * [tabix/bgzip](https://github.com/samtools/htslib)
 * (optional) An custom hg19/GRCh37-based gene/exon track. If one is not supplied, SVScore will download refGene annotations in `generateannotations.pl`. For more information, see [First Time Setup](#first-time-setup)

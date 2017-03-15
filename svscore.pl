@@ -392,7 +392,7 @@ eval { # Catch errors
   close OUT;
 
 # Convert back to vcf, sort, and add header
-  system("svtools bedpetovcf -b $bedpeout > $vcfout");
+  system("cat $bedpeout | svtools bedpetovcf > $vcfout");
   system("grep \"^#\" $vcfout > $vcfout.header");
   print `grep -v "^#" $vcfout | sort -k1,1V -k2,2n | cat $vcfout.header -`;
   push @todelete, $vcfout,"$vcfout.header";
