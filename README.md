@@ -67,7 +67,7 @@ Truncation intervals are defined for each transcript which seems to be truncated
 | BND  |  X   |   X   |      |        |        |
 | INS  |  X   |   X   |      |    X   |    X   |
 | CNV  |  X   |   X   |  X   |        |        |
-| MEI  |  X   |   X   |      |        |        |
+| MEI  |  X   |   X   |      |    X   |    X   |
 
 To function correctly, SVScore requires that POS=END and CIPOS=CIEND for INS variants
 
