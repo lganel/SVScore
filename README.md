@@ -11,6 +11,7 @@ usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i
     -e        Points to exon BED file (refGene.exons.bed)
     -f        Points to intron BED file (refGene.introns.bed)
     -c        Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
+    -s        Specifies version of svtools to be used (defaults to version installed under name \"svtools\")
 
     --help    Display this message
     --version Display version
@@ -98,6 +99,8 @@ For SPAN/LTRUNC/RTRUNC, these operations are applied to the scores of the bases 
 The following must be in your path to use SVScore: svtools, vcfanno, tabix
   
 ## Notes
+The -s option should not be provided if svtools is present in the user's path as "svtools". This option should only be used if svtools is installed as "svtools-XXX", where XXX is the version number
+
 If an input VCF file already has SVSCORE annotations in the INFO column, new annotations will overwrite old ones.
 
 Input VCF files may be gzipped, but gzipped files must end with .gz. Uncompressed input files should not end with this suffix. Annotation files may be gzipped or unzipped. SVScore will zip/unzip files as necessary using bgzip and zcat.

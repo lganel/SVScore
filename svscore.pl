@@ -22,7 +22,7 @@ eval { # Catch errors
   my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
   my %options = ();
-  getopts('dvi:c:f:e:o:',\%options);
+  getopts('dvi:c:f:e:o:s:',\%options);
 
 # Parse command line options, set variables, check input parameters
   my $debug = defined $options{'d'};
@@ -30,6 +30,8 @@ eval { # Catch errors
   my $inputfile  = $options{'i'};
   &main::HELP_MESSAGE() && die unless defined $inputfile;
   die "Could not find input file $inputfile" unless (-s $inputfile || $inputfile eq "stdin");
+  my $svtoolsversion = (defined $options{'s'} ? "-$options{'s'}" : "");
+  die "svtools$svtoolsversion not in path. Ensure svtools$svtoolsversion is installed and \$PATH is set correctly, or specify another version using -s" unless `which svtools$svtoolsversion`;
   my $caddfile = (defined $options{'c'} ? $options{'c'} : 'whole_genome_SNVs.tsv.gz');
   die "Could not find CADD file $caddfile" unless -s $caddfile;
   my $intronfile = (defined $options{'f'} ? $options{'f'} : 'refGene.introns.bed');
@@ -156,7 +158,7 @@ eval { # Catch errors
     }
   }
 
-  my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; vcfanno -ends conf.toml $sortedfile | perl \$SVSCOREDIR/reorderheader.pl stdin $inputfile | svtools vcftobedpe > $preprocessedfile"; # Sort, annotate, reorder header, convert to BEDPE
+  my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; vcfanno -ends conf.toml $sortedfile | perl \$SVSCOREDIR/reorderheader.pl stdin $inputfile | svtools$svtoolsversion vcftobedpe > $preprocessedfile"; # Sort, annotate, reorder header, convert to BEDPE
   push @todelete, $preprocessedfile, $sortedfile unless $debug;
   print STDERR "Preprocessing command:\n$preprocess\n" if $debug;
   die "Preprocessing failed;;" . join(',',@todelete) if (system($preprocess) || -z $preprocessedfile);
@@ -392,7 +394,7 @@ eval { # Catch errors
   close OUT;
 
 # Convert back to vcf, sort, and add header
-  system("cat $bedpeout | svtools bedpetovcf > $vcfout");
+  system("cat $bedpeout | svtools$svtoolsversion bedpetovcf > $vcfout");
   system("grep \"^#\" $vcfout > $vcfout.header");
   print `grep -v "^#" $vcfout | sort -k1,1V -k2,2n | cat $vcfout.header -`;
   push @todelete, $vcfout,"$vcfout.header";
@@ -602,6 +604,7 @@ sub main::HELP_MESSAGE() {
     -e	      Points to exon BED file (refGene.exons.bed)
     -f	      Points to intron BED file (refGene.introns.bed)
     -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
+    -s	      Specifies version of svtools to be used (defaults to version installed under name \"svtools\")
 
     --help    Display this message
     --version Display version\n"
