@@ -19,13 +19,9 @@ usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i
 
 ## First Time Setup
 After downloading SVScore, there are a few steps to follow before it is ready to use.
-  1. Place the path to the SVScore installation directory in an environment variable called $SVSCOREDIR. Ideally, this should be done by appending the following line to the user's ~/.bashrc file or equivalent:
-  ```
-    export SVSCOREDIR=/path/to/installation/
-  ```
-  2. Test SVScore using `sh tests/test.sh path/to/whole_genome_SNVs.tsv.gz`
-  3. Generate annotation files. For more on this, see [Annotation Files](#annotation-files).
-  4. SVScore assumes the user's version of perl is installed in the default directory (`/usr/bin/perl`). If this is not the case, the first line of all .pl files should be changed to reflect the correct perl installation directory.
+  1. Test SVScore using `sh tests/test.sh path/to/whole_genome_SNVs.tsv.gz`
+  2. Generate annotation files. For more on this, see [Annotation Files](#annotation-files).
+  3. SVScore assumes the user's version of perl is installed in the default directory (`/usr/bin/perl`). If this is not the case, the first line of all .pl files should be changed to reflect the correct perl installation directory.
 
 ## Annotation Files
   * If planning to use the default (refGene) annotations, simply execute `./generateannotations.pl` to generate the annotation files required by SVScore. If planning to use a custom annotation track, `generateannotations.pl` can be used to generate custom annotation files, or the user can generate them manually (though this is not recommended).

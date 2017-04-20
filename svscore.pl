@@ -10,6 +10,7 @@ use List::Util qw(max min sum);
 use List::MoreUtils qw(pairwise uniq);
 use Time::HiRes qw(gettimeofday);
 use Math::Round qw(nearest);
+use FindBin qw($Bin);
 
 sub main::HELP_MESSAGE(); # Declaration to make perl happy
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
@@ -158,7 +159,7 @@ eval { # Catch errors
     }
   }
 
-  my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; vcfanno -ends conf.toml $sortedfile | perl \$SVSCOREDIR/reorderheader.pl stdin $inputfile | svtools$svtoolsversion vcftobedpe > $preprocessedfile"; # Sort, annotate, reorder header, convert to BEDPE
+  my $preprocess = "awk '\$0~\"^#\" {print \$0; next } { print \$0 | \"sort -k1,1V -k2,2n\" }' $inputfile | bgzip -c > $sortedfile; vcfanno -ends conf.toml $sortedfile | perl $Bin/reorderheader.pl stdin $inputfile | svtools$svtoolsversion vcftobedpe > $preprocessedfile"; # Sort, annotate, reorder header, convert to BEDPE
   push @todelete, $preprocessedfile, $sortedfile unless $debug;
   print STDERR "Preprocessing command:\n$preprocess\n" if $debug;
   die "Preprocessing failed;;" . join(',',@todelete) if (system($preprocess) || -z $preprocessedfile);
