@@ -4,14 +4,14 @@ SVScore is a VCF annotation tool which scores structural variants by predicted p
 ## Usage
 ```
 usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i vcf
-    -i        Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use \"-i stdin\" if using standard input
+    -i        Input VCF file. May be bgzip compressed (ending in .vcf.gz). Use "-i stdin" if using standard input
     -d        Debug mode, keeps intermediate and supporting files, displays progress
     -v        Verbose mode - show all calculated scores (left/right/span/ltrunc/rtrunc, as appropriate)
     -o        Comma-separated list of operations to perform on CADD score intervals (must be some combination of sum, max, mean, meanweighted, top\\d, and top\\dweighted - defaults to top10weighted)
     -e        Points to exon BED file (refGene.exons.bed)
     -f        Points to intron BED file (refGene.introns.bed)
     -c        Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
-    -s        Specifies version of svtools to be used (defaults to version installed under name \"svtools\")
+    -s        Specifies version of svtools to be used (defaults to version installed under name "svtools")
 
     --help    Display this message
     --version Display version
