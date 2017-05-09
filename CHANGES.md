@@ -1,9 +1,10 @@
-## 0.6 (In development)
+## 0.6 (05/09/17)
   * Testing now uses custom script instead of diff, allowing for small differences resulting from differing Perl version
-  * Removed -h. SVScore now depends on a system variable called $SVSCOREDIR
+  * Removed -h
   * Removed setup.sh
   * Added -o option to generateannotations.pl
-  * Simplified test.sh, made output look prettier
+  * Simplified test.sh, made output look prettier, now works from any directory
+  * Added compatibility with newer versions of svtools, along with -s option for nonstandard svtools installations
 
 ## 0.5.1 (06/20/16)
  * Compatibility with vcfanno v0.0.11 (which provides relevant bug fixes)
