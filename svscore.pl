@@ -2,7 +2,7 @@
 ## Author: Liron Ganel
 ## Laboratory of Ira Hall, McDonnell Genome Institute
 ## Washington University in St. Louis
-## Version 0.5
+## Version 0.6
 
 use strict;
 use Getopt::Std;
@@ -14,7 +14,7 @@ use FindBin qw($Bin);
 
 sub main::HELP_MESSAGE(); # Declaration to make perl happy
 $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt execution
-$main::VERSION = '0.5';
+$main::VERSION = '0.6';
 
 eval { # Catch errors
   my %possibleoperations = ("MAX", 1, "SUM", 1, "TOP", 1, "MEAN", 1, "MEANWEIGHTED", 1, "TOPWEIGHTED", 1); # Hash of supported operations
