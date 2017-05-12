@@ -12,6 +12,7 @@ usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i
     -f        Points to intron BED file (refGene.introns.bed)
     -c        Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
     -s        Specifies version of svtools to be used (defaults to version installed under name "svtools")
+    -t	      Length threshold, in bp, above which SVs receive an automatic score of 100 (1,000,000)
 
     --help    Display this message
     --version Display version
@@ -94,6 +95,16 @@ For SPAN/LTRUNC/RTRUNC, these operations are applied to the scores of the bases 
 
 The following must be in your path to use SVScore: svtools, vcfanno, tabix
   
+## Troubleshooting
+* SVScore takes a long time to run
+  * Use `split.pl` to split input VCF into multiple files and run multiple instances of svscore.pl in parallel. `split.pl` is recommended over Unix `split` because it ensures both ends of multiline variants end up in the same file, so long as multiline variant IDs are exclusively indicated by the event ID followed by an underscore (there may be extra characters following the underscore if they are not part of the event ID). Usage is as follows:
+    ```
+    perl split.pl [-n linesperfile] input.vcf.gz
+    ```
+* SVScore returns an "Out of memory!" error (typically, this should only happen for large input VCFs)
+  * Use `split.pl` to parallelize SVScore, reducing the file size per instance
+  * Alternatively, use the -t option to reduce the size threshold above which no scores are calculated
+
 ## Notes
 The -s option should not be provided if svtools is present in the user's path as "svtools". This option should only be used if svtools is installed as "svtools-XXX", where XXX is the version number
 

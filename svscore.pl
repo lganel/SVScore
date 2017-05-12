@@ -23,7 +23,7 @@ eval { # Catch errors
   my %intervals = ("LEFT", 0, "RIGHT", 1, "SPAN", 2, "LTRUNC", 3, "RTRUNC", 4); # Hash of supported intervals
 
   my %options = ();
-  getopts('dvi:c:f:e:o:s:',\%options);
+  getopts('dvi:c:f:e:o:s:t:',\%options);
 
 # Parse command line options, set variables, check input parameters
   my $debug = defined $options{'d'};
@@ -41,6 +41,7 @@ eval { # Catch errors
   die "Could not find exon file $exonfile" unless -s $exonfile;
   $options{'o'} =~ tr/[a-z]/[A-Z]/ if defined $options{'o'};
   my $ops = (defined $options{'o'} ? $options{'o'} : 'TOP10WEIGHTED');
+  my $lengththresh = (defined $options{'t'} ? $options{'t'} : 1000000);
 
   my @ops = uniq(split(/,/,$ops));
   my %operations = (); # Hash of chosen operations
@@ -292,7 +293,7 @@ eval { # Catch errors
     $scores{"RIGHT"} = cscoreop($caddfile, $ops, $rightchrom, $rightstart, $rightstop, $probright);
     
     if ($svtype eq "DEL" || $svtype eq "DUP" || $svtype eq "CNV") {
-      if ($rightstop - $leftstart > 1000000) {
+      if ($rightstop - $leftstart > $lengththresh) {
 	my @hundred = (100) x @ops;
 	$scores{"SPAN"} = \@hundred;
       } else {
@@ -606,6 +607,7 @@ sub main::HELP_MESSAGE() {
     -f	      Points to intron BED file (refGene.introns.bed)
     -c	      Points to whole_genome_SNVs.tsv.gz (defaults to current directory)
     -s	      Specifies version of svtools to be used (defaults to version installed under name \"svtools\")
+    -t	      Length threshold above which SVs receive an automatic score of 100
 
     --help    Display this message
     --version Display version\n"

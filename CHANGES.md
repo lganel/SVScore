@@ -1,8 +1,9 @@
-## 0.6 (05/09/17)
+## 0.6 (05/12/17)
   * Testing now uses custom script instead of diff, allowing for small differences resulting from differing Perl version
   * Removed -h
   * Removed setup.sh
   * Added -o option to generateannotations.pl
+  * Added -t to control memory usage
   * Simplified test.sh, made output look prettier, now works from any directory
   * Added compatibility with newer versions of svtools, along with -s option for nonstandard svtools installations
 
