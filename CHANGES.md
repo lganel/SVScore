@@ -1,4 +1,5 @@
 ## 0.6 (05/12/17)
+  * Added splitting script to allow parallelization
   * Testing now uses custom script instead of diff, allowing for small differences resulting from differing Perl version
   * Removed -h
   * Removed setup.sh
