@@ -13,12 +13,13 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help and --version flags halt 
 $main::VERSION = '0.1';
 
 my %options = ();
-getopts('n:o:',\%options);
+getopts('hn:o:',\%options);
+main::HELP_MESSAGE() && exit if $options{'h'} || !defined $ARGV[0];
 my $linesperfile = (defined $options{'n'} ? $options{'n'} : 10000);
 my $outputdir = (defined $options{'o'} ? $options{'o'} : ".");
 mkdir $outputdir unless -d $outputdir;
 
-die "Please provide a valid input file" unless defined $ARGV[0] && -s $ARGV[0];
+die "Please provide a valid input file" unless -s $ARGV[0];
 my $infile = $ARGV[0];
 my $catprefix = ($infile =~ /\.gz$/ ? "z" : "");
 print STDERR "Grabbing header\n";
@@ -68,3 +69,16 @@ while(my $line = <IN>) {
 close OUT;
 
 unlink("$outputdir/header.tmp") || die "Could not delete header.tmp: $!";
+
+sub main::HELP_MESSAGE() {
+  print STDERR "split.pl takes a VCF file and splits it into many files, each with approximately the given number of variant lines, ensuring that multiline variants all end up in the same file. The input VCF files can be bgzipped or uncompressed.
+
+  usage: perl split.pl [-n linesperfile] [-o outputdir] input.vcf[.gz]
+
+      -n        Number of lines per file (1000)
+      -o        Output directory (defaults to current directory)i
+      -h	Display this message
+      
+      --help    Display this message
+      --version	Display version\n"
+}
