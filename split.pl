@@ -27,7 +27,7 @@ system("${catprefix}cat $infile | grep \"^#\" > $outputdir/header.tmp") && die "
 print STDERR "Sorting file\n";
 open(IN,"${catprefix}cat $infile | grep -v \"^#\" | sort -k3,3n |") || die "Could not open $infile: $!"; # Remove header, sort, and open
 
-open(OUT,"| sort -k1,1V -k2,2n | cat tmp/header.tmp - | bgzip -c > $outputdir/split1.vcf.gz") || die "Cannot pipe to bgzip: $!"; 
+open(OUT,"| sort -k1,1V -k2,2n | cat $outputdir/header.tmp - | bgzip -c > $outputdir/split1.vcf.gz") || die "Cannot pipe to bgzip: $!"; 
 
 my $lastid;
 print STDERR "Starting file 1\n";
@@ -57,7 +57,7 @@ while(my $line = <IN>) {
     $filenum++;
     $linenum = 1;
     #my $filenumstring = ($filenum < 10 ? "0$filenum" : $filenum);
-    open(OUT,"| sort -k1,1V -k2,2n | cat tmp/header.tmp - | bgzip -c > $outputdir/split$filenum.vcf.gz") || die "Cannot pipe to bgzip: $!"; 
+    open(OUT,"| sort -k1,1V -k2,2n | cat $outputdir/header.tmp - | bgzip -c > $outputdir/split$filenum.vcf.gz") || die "Cannot pipe to bgzip: $!"; 
     print STDERR "Starting file $filenum\n";
 	
   } else { # Don't need to split
