@@ -1,6 +1,8 @@
 # SVScore
 SVScore is a VCF annotation tool which scores structural variants by predicted pathogenicity based on SNP-based CADD scores. For each variant, SVScore first defines important genomic intervals based on the variant type, breakend confidence intervals, and overlapping exon/intron annotations. It then applies an operation to each interval to aggregate the CADD scores in that interval into an interval score. A score for a given operation defined as the maximum of all interval scores calculated using that operation. SVScore is based on hg19/GRCh37.
 
+For more information, please see our paper in Bioinformatics: https://doi.org/10.1093/bioinformatics/btw789
+
 ## Usage
 ```
 usage: ./svscore.pl [-dv] [-o op] [-e exonfile] [-f intronfile] [-c caddfile] -i vcf
